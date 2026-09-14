@@ -39,6 +39,79 @@ SCA focuses on identifying and managing open-source components and third-party l
 ## Conclusion
 By integrating SAST, SCA, and IaC scanning practices into the DevSecOps pipeline, the project aims to enhance the security posture of the running applications in AWS, reducing vulnerabilities, and ensure compliance throughout the software development lifecycle.
 
+## Multi-environment AWS deploy (dev / staging / production)
+
+Single AWS account, separate Terraform state per environment. Trunk-based flow on `main`.
+
+| Trigger | Environment | Behavior |
+|---------|-------------|----------|
+| PR to `main` | — | `terraform plan` against **dev** |
+| Merge/push to `main` | `dev` | Auto `terraform apply` |
+| Actions → **AWS Deploy** → Run workflow → `staging` | `staging` | Manual apply |
+| Actions → **AWS Deploy** → Run workflow → `production` | `production` | Manual apply (after Environment approval) |
+
+```mermaid
+flowchart LR
+  feature[Feature branch] --> pr[Pull request]
+  pr -->|terraform plan vs dev| review[Review]
+  review -->|merge to main| dev[Auto deploy dev]
+  dev -->|manual workflow_dispatch| staging[Deploy staging]
+  staging -->|manual workflow_dispatch| prod[Deploy production]
+```
+
+### GitHub Environments setup (required once)
+
+In the repo: **Settings → Environments**, create:
+
+1. **`dev`** — no required reviewers (auto-deploy from `main`)
+2. **`staging`** — no required reviewers (gate is manual Run workflow)
+3. **`production`** — enable **Required reviewers** (add yourself), and under **Deployment branches** restrict to `main`
+
+Repo secrets (or the same secrets on each Environment):
+
+- `AWS_ACCESS_KEY_ID`
+- `AWS_SECRET_ACCESS_KEY`
+
+### Promote day to day
+
+1. Open a PR → wait for Terraform plan (and SAST) to pass → merge
+2. Merge deploys **dev** automatically
+3. When ready: **Actions** → **AWS Deploy** → **Run workflow** → select **staging**
+4. When ready: **Run workflow** → select **production** → approve the Environment gate if prompted
+
+### Terraform layout
+
+| Path | Purpose |
+|------|---------|
+| `backends/<env>.hcl` | S3 state key per env (`env/dev/...`, `env/staging/...`, `env/production/...`) |
+| `envs/<env>.tfvars` | Non-secret env vars (`environment`, `aws_region`) |
+| `main.tf` | Env-scoped resources (app data bucket); shared state bucket is bootstrap only |
+
+### Local Terraform commands
+
+```bash
+# Dev
+terraform init -reconfigure -backend-config=backends/dev.hcl
+terraform plan -var-file=envs/dev.tfvars
+terraform apply -var-file=envs/dev.tfvars
+
+# Staging
+terraform init -reconfigure -backend-config=backends/staging.hcl
+terraform plan -var-file=envs/staging.tfvars
+terraform apply -var-file=envs/staging.tfvars
+
+# Production
+terraform init -reconfigure -backend-config=backends/production.hcl
+terraform plan -var-file=envs/production.tfvars
+terraform apply -var-file=envs/production.tfvars
+```
+
+Switching environments locally always needs `-reconfigure` so Terraform picks up the other state key.
+
+### Branch protection (recommended)
+
+On `main`: require a pull request, require status checks (SAST + Terraform plan), block direct pushes.
+
 # DevSecOps Project Diagram
 
 ```mermaid
