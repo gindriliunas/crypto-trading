@@ -17,13 +17,13 @@ npm run dev
 
 Open http://localhost:3000
 
-Optional: copy `.env.example` to `.env.local` and set Cognito + `DATABASE_URL` (RDS is private — local access needs a tunnel or temporary path).
+Optional: copy `.env.example` to `.env.local` and set Cognito + `DATABASE_URL` (RDS is private — local access needs a tunnel).
 
 ## Auth and history
 
-1. Sign up / sign in on the dashboard (Cognito email + password)
-2. Buy/sell paper trades — saved against your Cognito user id in Postgres
-3. Sign in later (any browser) to see the same cash, holdings, and trade history / P&L
+1. Sign up / sign in (Cognito email + password)
+2. Buy/sell paper trades — saved per Cognito user in Postgres
+3. Sign in later to see the same history / P&L
 
 ## Docker
 
@@ -37,8 +37,8 @@ docker run --rm -p 3000:3000 \
   crypto-dashboard
 ```
 
-## App Runner
+## ECS Express Mode
 
-Root Terraform deploys Cognito, private RDS, NAT, Secrets Manager, ECR, and an **App Runner** service (VPC connector for RDS). The service gets Cognito env vars, `DATABASE_URL`, and `AUTH_COOKIE_SECURE=true` (HTTPS).
+Root Terraform deploys Cognito, private RDS, ECR, and an **ECS Express Mode** service (managed HTTPS URL + load balancing). App Runner is not used (AWS is stopping new App Runner customers).
 
-After deploy, use Terraform output `dashboard_url` (`https://…awsapprunner.com`).
+After deploy, use Terraform output `dashboard_url`. Requires Fargate vCPU quota > 0 in the region.

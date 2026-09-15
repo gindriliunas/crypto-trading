@@ -58,7 +58,7 @@ resource "aws_route_table_association" "public" {
   route_table_id = aws_route_table.public.id
 }
 
-# Private subnets for RDS + App Runner VPC connector
+# Private subnets for RDS only (no internet route)
 resource "aws_subnet" "private" {
   count = 2
 
@@ -72,34 +72,8 @@ resource "aws_subnet" "private" {
   }
 }
 
-resource "aws_eip" "nat" {
-  domain = "vpc"
-
-  tags = {
-    Name = "${local.name}-nat"
-  }
-
-  depends_on = [aws_internet_gateway.app]
-}
-
-resource "aws_nat_gateway" "app" {
-  allocation_id = aws_eip.nat.id
-  subnet_id     = aws_subnet.public[0].id
-
-  tags = {
-    Name = "${local.name}-nat"
-  }
-
-  depends_on = [aws_internet_gateway.app]
-}
-
 resource "aws_route_table" "private" {
   vpc_id = aws_vpc.app.id
-
-  route {
-    cidr_block     = "0.0.0.0/0"
-    nat_gateway_id = aws_nat_gateway.app.id
-  }
 
   tags = {
     Name = "${local.name}-private"
@@ -113,13 +87,13 @@ resource "aws_route_table_association" "private" {
   route_table_id = aws_route_table.private.id
 }
 
-resource "aws_security_group" "apprunner" {
-  name        = "${local.name}-apprunner"
-  description = "App Runner VPC connector egress to RDS and internet via NAT"
+resource "aws_security_group" "app" {
+  name        = "${local.name}-app"
+  description = "ECS Express Mode tasks: egress to RDS and internet"
   vpc_id      = aws_vpc.app.id
 
   egress {
-    description = "All egress (RDS, Cognito, CoinGecko via NAT)"
+    description = "All egress (RDS in-VPC, Cognito, CoinGecko, ECR)"
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
@@ -127,14 +101,14 @@ resource "aws_security_group" "apprunner" {
   }
 
   tags = {
-    Name = "${local.name}-apprunner"
+    Name = "${local.name}-app"
   }
 }
 
-# RDS is private-only: no public IP. Only App Runner may connect.
+# RDS is private-only: no public IP. Only the app security group may connect.
 resource "aws_security_group" "rds" {
   name        = "${local.name}-rds"
-  description = "Postgres: App Runner only; no internet ingress"
+  description = "Postgres: app tasks only; no internet ingress"
   vpc_id      = aws_vpc.app.id
 
   tags = {
@@ -142,11 +116,11 @@ resource "aws_security_group" "rds" {
   }
 }
 
-resource "aws_vpc_security_group_ingress_rule" "rds_from_apprunner" {
+resource "aws_vpc_security_group_ingress_rule" "rds_from_app" {
   security_group_id            = aws_security_group.rds.id
-  description                  = "Postgres only from App Runner"
+  description                  = "Postgres only from ECS Express tasks"
   from_port                    = 5432
   to_port                      = 5432
   ip_protocol                  = "tcp"
-  referenced_security_group_id = aws_security_group.apprunner.id
+  referenced_security_group_id = aws_security_group.app.id
 }

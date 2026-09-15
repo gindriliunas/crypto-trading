@@ -18,19 +18,19 @@ output "ecr_repository_url" {
   value       = aws_ecr_repository.app.repository_url
 }
 
-output "apprunner_service_arn" {
-  description = "App Runner service ARN"
-  value       = aws_apprunner_service.app.arn
+output "ecs_cluster_name" {
+  description = "ECS cluster name"
+  value       = aws_ecs_cluster.app.name
 }
 
-output "apprunner_service_url" {
-  description = "App Runner default service hostname"
-  value       = aws_apprunner_service.app.service_url
+output "express_service_arn" {
+  description = "ECS Express Mode service ARN"
+  value       = aws_ecs_express_gateway_service.app.service_arn
 }
 
 output "dashboard_url" {
-  description = "HTTPS URL for the dashboard (App Runner)"
-  value       = "https://${aws_apprunner_service.app.service_url}"
+  description = "HTTPS URL for the dashboard (ECS Express Mode)"
+  value       = length(aws_ecs_express_gateway_service.app.ingress_paths) > 0 ? "https://${aws_ecs_express_gateway_service.app.ingress_paths[0].endpoint}" : null
 }
 
 output "cognito_user_pool_id" {

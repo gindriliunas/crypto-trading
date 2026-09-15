@@ -86,12 +86,14 @@ Repo secrets (or the same secrets on each Environment):
 | `backends/<env>.hcl` | S3 state key per env (`env/dev/...`, `env/staging/...`, `env/production/...`) |
 | `envs/<env>.tfvars` | Non-secret env vars (`environment`, `aws_region`, `vpc_cidr`) |
 | `main.tf` | Env-scoped app data bucket; shared state bucket is bootstrap only |
-| `network.tf` / `ecr.tf` / `apprunner.tf` | VPC (public + private + NAT), ECR, App Runner |
+| `network.tf` / `ecr.tf` / `ecs_express.tf` | VPC, ECR, ECS Express Mode (managed HTTPS URL) |
 | `cognito.tf` / `rds.tf` | User pool (login) + Postgres for per-user paper trade history |
 
-The dashboard lives in `dashboard/`. Merge to `main` builds the image, pushes it to ECR, and deploys **App Runner** (0.25 vCPU / 512 MB) with a VPC connector to private RDS. After apply, Terraform output `dashboard_url` is the public **HTTPS** URL.
+The dashboard lives in `dashboard/`. Merge to `main` builds the image, pushes it to ECR, and deploys **ECS Express Mode** (0.25 vCPU / 512 MB Fargate). After apply, Terraform output `dashboard_url` is the public **HTTPS** URL.
 
-**Custom domain:** point a CNAME (e.g. `dev.gindri.com`) at the App Runner hostname from `apprunner_service_url` (not the old ALB).
+**Note:** Express Mode runs on Fargate. Your account needs a **Fargate On-Demand vCPU quota > 0** in `eu-west-2` (open an AWS Support case if it is still 0).
+
+**Custom domain:** point a CNAME (e.g. `dev.gindri.com`) at the Express Mode endpoint hostname from `dashboard_url`.
 
 **Accounts:** Cognito email/password. **History:** each signed-in user’s cash, holdings, and trades are stored in that environment’s RDS database (not in the browser).
 
