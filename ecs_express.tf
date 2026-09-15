@@ -193,6 +193,13 @@ resource "aws_ecs_express_gateway_service" "app" {
     Name = local.name
   }
 
+  # Avoid needless destroy/recreate churn during IAM/policy attachment races
+  lifecycle {
+    ignore_changes = [
+      infrastructure_role_arn,
+    ]
+  }
+
   depends_on = [
     aws_iam_role_policy_attachment.ecs_execution,
     aws_iam_role_policy.ecs_execution_secrets,

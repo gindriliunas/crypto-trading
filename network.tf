@@ -106,13 +106,19 @@ resource "aws_security_group" "app" {
 }
 
 # RDS is private-only: no public IP. Only the app security group may connect.
+# IMPORTANT: SG description is immutable in AWS — changing it forces replace and
+# then destroy fails with AuthFailure on the RDS ENI. Keep description stable.
 resource "aws_security_group" "rds" {
   name        = "${local.name}-rds"
-  description = "Postgres: app tasks only; no internet ingress"
+  description = "Postgres: ECS tasks only; no internet ingress"
   vpc_id      = aws_vpc.app.id
 
   tags = {
     Name = "${local.name}-rds"
+  }
+
+  lifecycle {
+    ignore_changes = [description]
   }
 }
 
@@ -123,23 +129,4 @@ resource "aws_vpc_security_group_ingress_rule" "rds_from_app" {
   to_port                      = 5432
   ip_protocol                  = "tcp"
   referenced_security_group_id = aws_security_group.app.id
-}
-
-# Old App Runner SG destroy tries ec2:DetachNetworkInterface on the RDS ENI and
-# fails with AuthFailure. Forget it in state; delete the orphan SG in the console
-# after confirming RDS only uses the new app security group.
-removed {
-  from = aws_security_group.apprunner
-
-  lifecycle {
-    destroy = false
-  }
-}
-
-removed {
-  from = aws_vpc_security_group_ingress_rule.rds_from_apprunner
-
-  lifecycle {
-    destroy = false
-  }
 }
