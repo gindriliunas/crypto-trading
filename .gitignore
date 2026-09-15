@@ -1,6 +1,3 @@
-# Ignore local Terraform helper artifacts
-.terraform/cognito-auto-confirm.zip
-
 # Local .terraform directories
 .terraform/
 

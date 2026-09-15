@@ -105,7 +105,9 @@ resource "aws_iam_role_policy" "ecs_task_cognito" {
         Action = [
           "cognito-idp:SignUp",
           "cognito-idp:InitiateAuth",
-          "cognito-idp:GetUser"
+          "cognito-idp:GetUser",
+          "cognito-idp:AdminConfirmSignUp",
+          "cognito-idp:AdminUpdateUserAttributes"
         ]
         Resource = [
           aws_cognito_user_pool.app.arn

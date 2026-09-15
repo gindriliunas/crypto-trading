@@ -1,4 +1,6 @@
 import {
+  AdminConfirmSignUpCommand,
+  AdminUpdateUserAttributesCommand,
   CognitoIdentityProviderClient,
   InitiateAuthCommand,
   SignUpCommand,
@@ -52,12 +54,30 @@ function getJwks() {
 }
 
 export async function signUp(email: string, password: string) {
-  await cognitoClient().send(
+  const client = cognitoClient();
+
+  await client.send(
     new SignUpCommand({
       ClientId: clientId(),
       Username: email,
       Password: password,
       UserAttributes: [{ Name: "email", Value: email }],
+    }),
+  );
+
+  // Confirm without a PreSignUp Lambda (CI IAM cannot create Lambda).
+  await client.send(
+    new AdminConfirmSignUpCommand({
+      UserPoolId: userPoolId(),
+      Username: email,
+    }),
+  );
+
+  await client.send(
+    new AdminUpdateUserAttributesCommand({
+      UserPoolId: userPoolId(),
+      Username: email,
+      UserAttributes: [{ Name: "email_verified", Value: "true" }],
     }),
   );
 }
