@@ -1,7 +1,9 @@
 FROM node:22-alpine AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
-RUN npm ci
+# npm install (not ci): lockfiles generated on Windows can omit Linux optional
+# platform packages that Alpine needs; install still honors the lockfile ranges.
+RUN npm install
 
 FROM node:22-alpine AS builder
 WORKDIR /app
