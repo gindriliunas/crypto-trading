@@ -124,3 +124,22 @@ resource "aws_vpc_security_group_ingress_rule" "rds_from_app" {
   ip_protocol                  = "tcp"
   referenced_security_group_id = aws_security_group.app.id
 }
+
+# Old App Runner SG destroy tries ec2:DetachNetworkInterface on the RDS ENI and
+# fails with AuthFailure. Forget it in state; delete the orphan SG in the console
+# after confirming RDS only uses the new app security group.
+removed {
+  from = aws_security_group.apprunner
+
+  lifecycle {
+    destroy = false
+  }
+}
+
+removed {
+  from = aws_vpc_security_group_ingress_rule.rds_from_apprunner
+
+  lifecycle {
+    destroy = false
+  }
+}
