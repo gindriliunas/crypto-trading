@@ -137,7 +137,7 @@ export async function getSessionUser(): Promise<AuthUser | null> {
 export function authCookieOptions(maxAgeSeconds: number) {
   return {
     httpOnly: true,
-    // ALB is HTTP today; set AUTH_COOKIE_SECURE=true after HTTPS is enabled
+    // App Runner serves HTTPS; AUTH_COOKIE_SECURE=true is set in Terraform
     secure: process.env.AUTH_COOKIE_SECURE === "true",
     sameSite: "lax" as const,
     path: "/",

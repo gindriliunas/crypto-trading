@@ -18,24 +18,19 @@ output "ecr_repository_url" {
   value       = aws_ecr_repository.app.repository_url
 }
 
-output "ecs_cluster_name" {
-  description = "ECS cluster name"
-  value       = aws_ecs_cluster.app.name
+output "apprunner_service_arn" {
+  description = "App Runner service ARN"
+  value       = aws_apprunner_service.app.arn
 }
 
-output "ecs_service_name" {
-  description = "ECS service name"
-  value       = aws_ecs_service.app.name
-}
-
-output "alb_dns_name" {
-  description = "Public ALB DNS name for the dashboard"
-  value       = aws_lb.app.dns_name
+output "apprunner_service_url" {
+  description = "App Runner default service hostname"
+  value       = aws_apprunner_service.app.service_url
 }
 
 output "dashboard_url" {
-  description = "HTTP URL for the dashboard"
-  value       = "http://${aws_lb.app.dns_name}"
+  description = "HTTPS URL for the dashboard (App Runner)"
+  value       = "https://${aws_apprunner_service.app.service_url}"
 }
 
 output "cognito_user_pool_id" {

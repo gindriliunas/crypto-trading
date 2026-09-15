@@ -58,7 +58,7 @@ resource "aws_route_table_association" "public" {
   route_table_id = aws_route_table.public.id
 }
 
-# Private subnets for RDS (no internet route; reachable from ECS in the VPC)
+# Private subnets for RDS + App Runner VPC connector
 resource "aws_subnet" "private" {
   count = 2
 
@@ -72,8 +72,34 @@ resource "aws_subnet" "private" {
   }
 }
 
+resource "aws_eip" "nat" {
+  domain = "vpc"
+
+  tags = {
+    Name = "${local.name}-nat"
+  }
+
+  depends_on = [aws_internet_gateway.app]
+}
+
+resource "aws_nat_gateway" "app" {
+  allocation_id = aws_eip.nat.id
+  subnet_id     = aws_subnet.public[0].id
+
+  tags = {
+    Name = "${local.name}-nat"
+  }
+
+  depends_on = [aws_internet_gateway.app]
+}
+
 resource "aws_route_table" "private" {
   vpc_id = aws_vpc.app.id
+
+  route {
+    cidr_block     = "0.0.0.0/0"
+    nat_gateway_id = aws_nat_gateway.app.id
+  }
 
   tags = {
     Name = "${local.name}-private"
@@ -87,20 +113,13 @@ resource "aws_route_table_association" "private" {
   route_table_id = aws_route_table.private.id
 }
 
-resource "aws_security_group" "alb" {
-  name        = "${local.name}-alb"
-  description = "Allow HTTP to the dashboard load balancer"
+resource "aws_security_group" "apprunner" {
+  name        = "${local.name}-apprunner"
+  description = "App Runner VPC connector egress to RDS and internet via NAT"
   vpc_id      = aws_vpc.app.id
 
-  ingress {
-    description = "HTTP"
-    from_port   = 80
-    to_port     = 80
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
   egress {
+    description = "All egress (RDS, Cognito, CoinGecko via NAT)"
     from_port   = 0
     to_port     = 0
     protocol    = "-1"
@@ -108,55 +127,26 @@ resource "aws_security_group" "alb" {
   }
 
   tags = {
-    Name = "${local.name}-alb"
+    Name = "${local.name}-apprunner"
   }
 }
 
-resource "aws_security_group" "ecs" {
-  name        = "${local.name}-ecs"
-  description = "Allow ALB traffic to the dashboard task"
-  vpc_id      = aws_vpc.app.id
-
-  ingress {
-    description     = "App from ALB"
-    from_port       = var.app_port
-    to_port         = var.app_port
-    protocol        = "tcp"
-    security_groups = [aws_security_group.alb.id]
-  }
-
-  egress {
-    from_port   = 0
-    to_port     = 0
-    protocol    = "-1"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  tags = {
-    Name = "${local.name}-ecs"
-  }
-}
-
-# RDS is private-only: no public IP, no internet route on its subnets.
-# Cognito never connects to Postgres — only the ECS app does (after Cognito auth).
+# RDS is private-only: no public IP. Only App Runner may connect.
 resource "aws_security_group" "rds" {
   name        = "${local.name}-rds"
-  description = "Postgres: ECS tasks only; no internet ingress"
+  description = "Postgres: App Runner only; no internet ingress"
   vpc_id      = aws_vpc.app.id
-
-  # Intentionally no egress rules: RDS does not initiate outbound connections.
-  # Terraform omits the AWS default allow-all egress when egress is unspecified.
 
   tags = {
     Name = "${local.name}-rds"
   }
 }
 
-resource "aws_vpc_security_group_ingress_rule" "rds_from_ecs" {
+resource "aws_vpc_security_group_ingress_rule" "rds_from_apprunner" {
   security_group_id            = aws_security_group.rds.id
-  description                  = "Postgres only from ECS tasks"
+  description                  = "Postgres only from App Runner"
   from_port                    = 5432
   to_port                      = 5432
   ip_protocol                  = "tcp"
-  referenced_security_group_id = aws_security_group.ecs.id
+  referenced_security_group_id = aws_security_group.apprunner.id
 }

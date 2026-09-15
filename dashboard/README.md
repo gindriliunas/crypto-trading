@@ -17,7 +17,7 @@ npm run dev
 
 Open http://localhost:3000
 
-Optional: copy `.env.example` to `.env.local` and set Cognito + `DATABASE_URL` to exercise account history locally (RDS must be reachable from your machine; the Terraform RDS instance is private to the VPC by default).
+Optional: copy `.env.example` to `.env.local` and set Cognito + `DATABASE_URL` (RDS is private — local access needs a tunnel or temporary path).
 
 ## Auth and history
 
@@ -37,8 +37,8 @@ docker run --rm -p 3000:3000 \
   crypto-dashboard
 ```
 
-## ECS (Fargate)
+## App Runner
 
-Root Terraform deploys Cognito, RDS (private subnets), Secrets Manager (`DATABASE_URL`), and one Fargate task behind an HTTP ALB. The task receives Cognito env vars and the DB secret automatically.
+Root Terraform deploys Cognito, private RDS, NAT, Secrets Manager, ECR, and an **App Runner** service (VPC connector for RDS). The service gets Cognito env vars, `DATABASE_URL`, and `AUTH_COOKIE_SECURE=true` (HTTPS).
 
-After deploy, use Terraform output `dashboard_url`.
+After deploy, use Terraform output `dashboard_url` (`https://…awsapprunner.com`).
