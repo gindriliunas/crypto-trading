@@ -37,6 +37,7 @@ jobs:
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: 1.5.7
+          terraform_wrapper: false
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -65,6 +66,7 @@ jobs:
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: 1.5.7
+          terraform_wrapper: false
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -76,8 +78,22 @@ jobs:
       - name: Terraform init (dev)
         run: terraform init -reconfigure -backend-config=backends/dev.hcl
 
+      - name: Terraform apply ECR (dev)
+        run: terraform apply -input=false -auto-approve -var-file=envs/dev.tfvars -target=aws_ecr_repository.app -target=aws_ecr_lifecycle_policy.app
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push dashboard image
+        run: |
+          ECR_URL=$(terraform output -raw ecr_repository_url)
+          docker build -t "$ECR_URL:${{ github.sha }}" -t "$ECR_URL:latest" dashboard
+          docker push "$ECR_URL:${{ github.sha }}"
+          docker push "$ECR_URL:latest"
+
       - name: Terraform apply (dev)
-        run: terraform apply -input=false -auto-approve -var-file=envs/dev.tfvars
+        run: terraform apply -input=false -auto-approve -var-file=envs/dev.tfvars -var="app_image_tag=${{ github.sha }}"
 
   deploy-manual:
     name: Deploy to ${{ inputs.environment }}
@@ -93,6 +109,7 @@ jobs:
         uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: 1.5.7
+          terraform_wrapper: false
 
       - name: Configure AWS credentials
         uses: aws-actions/configure-aws-credentials@v4
@@ -104,5 +121,19 @@ jobs:
       - name: Terraform init
         run: terraform init -reconfigure -backend-config=backends/${{ inputs.environment }}.hcl
 
+      - name: Terraform apply ECR
+        run: terraform apply -input=false -auto-approve -var-file=envs/${{ inputs.environment }}.tfvars -target=aws_ecr_repository.app -target=aws_ecr_lifecycle_policy.app
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      - name: Build and push dashboard image
+        run: |
+          ECR_URL=$(terraform output -raw ecr_repository_url)
+          docker build -t "$ECR_URL:${{ github.sha }}" -t "$ECR_URL:latest" dashboard
+          docker push "$ECR_URL:${{ github.sha }}"
+          docker push "$ECR_URL:latest"
+
       - name: Terraform apply
-        run: terraform apply -input=false -auto-approve -var-file=envs/${{ inputs.environment }}.tfvars
+        run: terraform apply -input=false -auto-approve -var-file=envs/${{ inputs.environment }}.tfvars -var="app_image_tag=${{ github.sha }}"

@@ -1,3 +1,6 @@
+# Ignore local Terraform helper artifacts
+.terraform/cognito-auto-confirm.zip
+
 # Local .terraform directories
 .terraform/
 
@@ -44,3 +47,11 @@ terraform.rc
 # Optional: ignore plan files saved before destroying Terraform configuration
 # Uncomment the line below if you want to ignore planout files.
 # planout
+
+# Next.js dashboard
+dashboard/node_modules/
+dashboard/.next/
+dashboard/out/
+dashboard/.env
+dashboard/.env*.local
+dashboard/npm-debug.log*

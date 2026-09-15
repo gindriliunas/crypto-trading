@@ -84,8 +84,14 @@ Repo secrets (or the same secrets on each Environment):
 | Path | Purpose |
 |------|---------|
 | `backends/<env>.hcl` | S3 state key per env (`env/dev/...`, `env/staging/...`, `env/production/...`) |
-| `envs/<env>.tfvars` | Non-secret env vars (`environment`, `aws_region`) |
-| `main.tf` | Env-scoped resources (app data bucket); shared state bucket is bootstrap only |
+| `envs/<env>.tfvars` | Non-secret env vars (`environment`, `aws_region`, `vpc_cidr`) |
+| `main.tf` | Env-scoped app data bucket; shared state bucket is bootstrap only |
+| `network.tf` / `ecs.tf` | VPC (public + private), ALB, ECR, ECS Fargate |
+| `cognito.tf` / `rds.tf` | User pool (login) + Postgres for per-user paper trade history |
+
+The dashboard lives in `dashboard/`. Merge to `main` builds the image, pushes it to ECR, and deploys **one** Fargate task (`256` CPU / `512` MB) behind an ALB. After apply, Terraform output `dashboard_url` is the public HTTP URL.
+
+**Accounts:** Cognito email/password. **History:** each signed-in user’s cash, holdings, and trades are stored in that environment’s RDS database (not in the browser).
 
 ### Local Terraform commands
 
