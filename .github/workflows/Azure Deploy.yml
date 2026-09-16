@@ -72,7 +72,7 @@ jobs:
       - if: github.actor != 'dependabot[bot]'
         run: terraform init -reconfigure -backend-config=backends/dev.hcl
       - if: github.actor != 'dependabot[bot]'
-        run: terraform plan -input=false -var-file=envs/dev.tfvars
+        run: terraform plan -input=false -lock-timeout=5m -var-file=envs/dev.tfvars
 
   deploy-dev:
     name: Deploy Azure Dev
@@ -111,7 +111,7 @@ jobs:
         run: terraform init -reconfigure -backend-config=backends/dev.hcl
       - name: Create registry and database first
         run: |
-          terraform apply -input=false -auto-approve -var-file=envs/dev.tfvars \
+          terraform apply -input=false -lock-timeout=5m -auto-approve -var-file=envs/dev.tfvars \
             -target=azurerm_resource_group.app \
             -target=azurerm_container_registry.app \
             -target=random_password.db \
@@ -150,7 +150,7 @@ jobs:
           docker push "$ACR/crypto-trading-dev:${{ github.sha }}"
           docker push "$ACR/crypto-trading-dev:latest"
       - name: Deploy Container App
-        run: terraform apply -input=false -auto-approve -var-file=envs/dev.tfvars -var="app_image_tag=${{ github.sha }}"
+        run: terraform apply -input=false -lock-timeout=5m -auto-approve -var-file=envs/dev.tfvars -var="app_image_tag=${{ github.sha }}"
       - name: Dashboard URL
         run: terraform output dashboard_url
 
@@ -216,7 +216,7 @@ jobs:
           terraform_wrapper: false
       - run: terraform init -reconfigure -backend-config=backends/${{ inputs.environment }}.hcl
       - run: |
-          terraform apply -input=false -auto-approve -var-file=envs/${{ inputs.environment }}.tfvars \
+          terraform apply -input=false -lock-timeout=5m -auto-approve -var-file=envs/${{ inputs.environment }}.tfvars \
             -target=azurerm_resource_group.app \
             -target=azurerm_container_registry.app \
             -target=random_password.db \
@@ -257,7 +257,7 @@ jobs:
           NAME="${{ steps.acr.outputs.image_name }}"
           docker push "$ACR/$NAME:${{ github.sha }}"
           docker push "$ACR/$NAME:latest"
-      - run: terraform apply -input=false -auto-approve -var-file=envs/${{ inputs.environment }}.tfvars -var="app_image_tag=${{ github.sha }}"
+      - run: terraform apply -input=false -lock-timeout=5m -auto-approve -var-file=envs/${{ inputs.environment }}.tfvars -var="app_image_tag=${{ github.sha }}"
       - run: terraform output dashboard_url
 
   dast-manual-dev:
