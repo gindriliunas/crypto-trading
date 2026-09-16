@@ -5,6 +5,12 @@ import {
   isAuthConfigured,
   signIn,
 } from "@/lib/auth";
+import {
+  assertNotLocked,
+  clearFailedAttempts,
+  lockKeyForEmail,
+  recordFailedAttempt,
+} from "@/lib/authLockout";
 
 export async function POST(request: Request) {
   if (!isAuthConfigured()) {
@@ -26,13 +32,23 @@ export async function POST(request: Request) {
       );
     }
 
-    const idToken = await signIn(email, password);
-    const response = NextResponse.json({ ok: true });
-    response.cookies.set(AUTH_COOKIE, idToken, authCookieOptions(60 * 60 * 24 * 7));
-    return response;
+    const lockKey = lockKeyForEmail(email);
+    await assertNotLocked(lockKey);
+
+    try {
+      const idToken = await signIn(email, password);
+      await clearFailedAttempts(lockKey);
+      const response = NextResponse.json({ ok: true });
+      response.cookies.set(AUTH_COOKIE, idToken, authCookieOptions(60 * 60 * 24 * 7));
+      return response;
+    } catch (error) {
+      await recordFailedAttempt(lockKey);
+      throw error;
+    }
   } catch (error) {
     const message =
       error instanceof Error ? error.message : "Invalid email or password";
-    return NextResponse.json({ error: message }, { status: 401 });
+    const status = message.includes("Too many failed") ? 429 : 401;
+    return NextResponse.json({ error: message }, { status });
   }
 }

@@ -1,6 +1,7 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
+import { MIN_PASSWORD_LENGTH } from "@/lib/passwordPolicy";
 
 type AuthPanelProps = {
   email: string | null;
@@ -8,18 +9,37 @@ type AuthPanelProps = {
   onAuthChange: () => void;
 };
 
+type SignupMeta = {
+  signupEnabled: boolean;
+  inviteRequired: boolean;
+  minPasswordLength: number;
+};
+
 export function AuthPanel({ email, configured, onAuthChange }: AuthPanelProps) {
   const [mode, setMode] = useState<"login" | "signup">("login");
   const [formEmail, setFormEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [inviteCode, setInviteCode] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [signupMeta, setSignupMeta] = useState<SignupMeta>({
+    signupEnabled: false,
+    inviteRequired: false,
+    minPasswordLength: MIN_PASSWORD_LENGTH,
+  });
+
+  useEffect(() => {
+    void fetch("/api/auth/signup")
+      .then((r) => r.json())
+      .then((data: SignupMeta) => setSignupMeta(data))
+      .catch(() => undefined);
+  }, []);
 
   if (!configured) {
     return (
       <div className="rounded-xl border border-amber-900/60 bg-amber-950/40 px-4 py-3 text-sm text-amber-200">
-        Cognito is not configured locally. Trades stay in this browser until you
-        deploy with JWT auth + Postgres.
+        Auth is not configured locally. Set JWT_SECRET and DATABASE_URL, or deploy
+        to Azure where Terraform injects them.
       </div>
     );
   }
@@ -54,7 +74,11 @@ export function AuthPanel({ email, configured, onAuthChange }: AuthPanelProps) {
       const response = await fetch(endpoint, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: formEmail, password }),
+        body: JSON.stringify({
+          email: formEmail,
+          password,
+          ...(mode === "signup" ? { inviteCode } : {}),
+        }),
       });
       const payload = (await response.json()) as { error?: string };
       if (!response.ok) {
@@ -74,6 +98,7 @@ export function AuthPanel({ email, configured, onAuthChange }: AuthPanelProps) {
       }
 
       setPassword("");
+      setInviteCode("");
       onAuthChange();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Auth failed");
@@ -81,6 +106,8 @@ export function AuthPanel({ email, configured, onAuthChange }: AuthPanelProps) {
       setBusy(false);
     }
   }
+
+  const canSignup = signupMeta.signupEnabled;
 
   return (
     <form
@@ -94,18 +121,21 @@ export function AuthPanel({ email, configured, onAuthChange }: AuthPanelProps) {
           </p>
           <p className="text-xs text-zinc-500">
             Paper trades and P&amp;L history sync to your account in Postgres.
+            Passwords must be at least {signupMeta.minPasswordLength} characters.
           </p>
         </div>
-        <button
-          type="button"
-          className="text-xs text-cyan-400 hover:text-cyan-300"
-          onClick={() => {
-            setMode(mode === "login" ? "signup" : "login");
-            setError(null);
-          }}
-        >
-          {mode === "login" ? "Need an account?" : "Have an account?"}
-        </button>
+        {canSignup ? (
+          <button
+            type="button"
+            className="text-xs text-cyan-400 hover:text-cyan-300"
+            onClick={() => {
+              setMode(mode === "login" ? "signup" : "login");
+              setError(null);
+            }}
+          >
+            {mode === "login" ? "Need an account?" : "Have an account?"}
+          </button>
+        ) : null}
       </div>
       <div className="grid gap-3 sm:grid-cols-[1fr_1fr_auto]">
         <input
@@ -120,21 +150,41 @@ export function AuthPanel({ email, configured, onAuthChange }: AuthPanelProps) {
         <input
           type="password"
           required
-          minLength={8}
+          minLength={mode === "signup" ? signupMeta.minPasswordLength : 1}
           autoComplete={mode === "login" ? "current-password" : "new-password"}
-          placeholder="Password (8+ chars)"
+          placeholder={
+            mode === "signup"
+              ? `Password (${signupMeta.minPasswordLength}+ chars)`
+              : "Password"
+          }
           value={password}
           onChange={(event) => setPassword(event.target.value)}
           className="rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100"
         />
         <button
           type="submit"
-          disabled={busy}
+          disabled={busy || (mode === "signup" && !canSignup)}
           className="rounded-lg bg-cyan-600 px-4 py-2 text-sm font-medium text-white hover:bg-cyan-500 disabled:opacity-60"
         >
           {busy ? "…" : mode === "login" ? "Sign in" : "Sign up"}
         </button>
       </div>
+      {mode === "signup" && signupMeta.inviteRequired ? (
+        <input
+          type="text"
+          required
+          autoComplete="off"
+          placeholder="Invite code"
+          value={inviteCode}
+          onChange={(event) => setInviteCode(event.target.value)}
+          className="mt-3 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-sm text-zinc-100"
+        />
+      ) : null}
+      {!canSignup && mode === "login" ? (
+        <p className="mt-2 text-xs text-zinc-500">
+          New accounts require an invite from the operator (Cyber Essentials access control).
+        </p>
+      ) : null}
       {error ? <p className="mt-2 text-sm text-rose-400">{error}</p> : null}
     </form>
   );

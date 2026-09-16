@@ -70,6 +70,68 @@ flowchart LR
 
 On `main`: require a pull request; require status checks from **Security Scans** (all jobs) and **Terraform Plan (Azure)**; block direct pushes.
 
+### Container scan findings and fix
+
+Trivy’s **container** job initially failed on the `node:22-alpine` runtime image. App npm packages in `dashboard/` were clean; findings were in the **base image**.
+
+#### Alpine OS (2 × HIGH)
+
+| Package | CVE | Issue | Fix |
+|---------|-----|--------|-----|
+| `libcrypto3` / `libssl3` | CVE-2026-14456 | OpenSSL QUIC DoS (unbounded memory) | `apk upgrade --no-cache` in the runtime stage (`3.5.7-r0` → `3.5.8-r0`) |
+
+#### Bundled Node toolchain (1 × CRITICAL, 10 × HIGH)
+
+Located under `/usr/local/lib/node_modules/npm/` inside the Node image — **not** used by the production Next.js standalone server (`node server.js`).
+
+| Library | CVEs | Severity | Issue |
+|---------|------|----------|--------|
+| `tar` | CVE-2026-59873 | CRITICAL | DoS via crafted gzip bomb |
+| `tar` | CVE-2026-59874, CVE-2026-73566 | HIGH | DoS via malformed / long-path archives |
+| `brace-expansion` | CVE-2026-13149, CVE-2026-14257, CVE-2026-69152 | HIGH | DoS in pattern expansion |
+| `pacote` | CVE-2026-9496 | HIGH | Vulnerability in npm package fetcher |
+| `picomatch` | CVE-2026-33671 | HIGH | ReDoS via crafted extglob patterns |
+| `ip-address` | CVE-2026-69192 | HIGH | Inconsistent IP parsing → SSRF risk |
+| `sigstore` | CVE-2026-48815 | HIGH | Weak cert verification option handling |
+
+**Remediation** (in `dashboard/Dockerfile` runner stage):
+
+1. `apk upgrade --no-cache` — patch Alpine OpenSSL  
+2. Remove unused `npm` / `yarn` / `corepack` from the runtime image so those toolchain CVEs are not shipped  
+
+Commit: `60b11e9`.
+
+---
+
+## Cyber Essentials (v3.3)
+
+Full readiness tables, MFA/device checklists, and 14-day patch SLA: **[docs/cyber-essentials.md](docs/cyber-essentials.md)**.  
+Firewall rule register: **[azure/FIREWALL_RULES.md](azure/FIREWALL_RULES.md)**.
+
+| Control | Project status (summary) |
+|---------|--------------------------|
+| Firewalls | **Partial** — HTTPS app + documented Postgres rules; device firewalls are Org |
+| Secure configuration | **Partial / Aligns** — TLS, hardened image, JWT cookies; Key Vault optional |
+| Security update management | **Aligns** (process) — Trivy gates + Dependabot + 14-day SLA |
+| User access control | **Partial** — strong passwords, lockout, invite signup; **cloud MFA is Org (auto-fail if missing)** |
+| Malware protection | **Org / Partial** — endpoint AV required on devices; non-root container |
+
+---
+
+## ISO/IEC 27001:2022
+
+Clause 4–10 and Annex A alignment tables (what aligns vs what does not): **[docs/ISO27001.md](docs/ISO27001.md)**.
+
+Technical controls (vuln management, IaC, TLS, SSDLC, env separation) are the strongest area. There is **no ISMS** yet (policy, risk assessment, Statement of Applicability, internal audit), so this is a gap analysis, not a certification claim.
+
+| Theme | Aligns | Does not fully align |
+|-------|--------|----------------------|
+| ISMS (4–10) | Operational CI/CD | No policy, SoA, audit, or management review |
+| A.5 Organizational | Auth secrets (bcrypt/JWT) | Policies, incident process, privacy programme |
+| A.6 People | App account disable (`disabled_at`) | Screening, awareness, event reporting |
+| A.7 Physical | Azure datacentres (PaaS) | Operator devices / home working (Org) |
+| A.8 Technological | Trivy/CodeQL, Terraform, TLS, env split | Key Vault, private DB, app MFA, SIEM, restore drills |
+
 ---
 
 ## Multi-environment Azure deploy
@@ -112,8 +174,10 @@ Optional (AWS Destroy only): `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`
 | Path | Purpose |
 |------|---------|
 | `azure/backends/<env>.hcl` | Azure Blob state key |
-| `azure/envs/<env>.tfvars` | `environment`, `location` |
+| `azure/envs/<env>.tfvars` | `environment`, `location`, optional `db_admin_cidrs` |
 | `azure/main.tf` | RG, ACR, Postgres, Log Analytics, Container Apps |
+| `azure/FIREWALL_RULES.md` | Inbound rule register (Cyber Essentials) |
+| `docs/cyber-essentials.md` | CE v3.3 readiness + Org checklists |
 
 ```bash
 cd azure
@@ -144,5 +208,10 @@ az containerapp hostname bind -n crypto-trading-dev-app -g crypto-trading-dev \
 
 ### Auth & data
 
-- **Accounts:** email/password (JWT + bcrypt)  
+- **Accounts:** email/password (JWT + bcrypt), **min 12 characters** + common-password deny list  
+- **Signup:** invite code required in Azure (`terraform output -raw signup_invite_code`)  
+- **Lockout:** 10 failed logins → 15 minute lock  
+- **Disable user:** `UPDATE users SET disabled_at = NOW() WHERE email = '...'`  
 - **History:** cash, holdings, and trades per user in that env’s Postgres DB  
+
+See [docs/cyber-essentials.md](docs/cyber-essentials.md) for MFA/device Org checklists.

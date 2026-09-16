@@ -54,6 +54,17 @@ variable "db_admin_username" {
   default = "paperadmin"
 }
 
+variable "db_admin_cidrs" {
+  type        = list(string)
+  default     = []
+  description = "Optional IPv4 CIDRs allowed to reach Postgres (in addition to Azure services). Document each in azure/FIREWALL_RULES.md."
+}
+
+variable "postgres_backup_retention_days" {
+  type    = number
+  default = 7
+}
+
 locals {
   name = "${var.project_name}-${var.environment}"
   tags = {
@@ -77,6 +88,11 @@ resource "random_password" "db" {
 
 resource "random_password" "jwt" {
   length  = 48
+  special = false
+}
+
+resource "random_password" "signup_invite" {
+  length  = 24
   special = false
 }
 
@@ -106,18 +122,21 @@ resource "azurerm_container_app_environment" "app" {
   tags                       = local.tags
 }
 
-# Public Flexible Server for learning (firewall allows Azure services + optional CIDR).
-# Harden to VNet later when provider registration / networking is stable.
+# Postgres is reachable from Azure services (Container Apps) via PG-01 firewall rule.
+# Optional operator CIDRs via var.db_admin_cidrs (see azure/FIREWALL_RULES.md).
+# Prefer private VNet + private DNS when networking maturity allows.
 resource "azurerm_postgresql_flexible_server" "app" {
-  name                   = "${local.name}-pg"
-  resource_group_name    = azurerm_resource_group.app.name
-  location               = azurerm_resource_group.app.location
-  version                = "16"
-  administrator_login    = var.db_admin_username
-  administrator_password = random_password.db.result
-  sku_name               = "B_Standard_B1ms"
-  storage_mb             = 32768
-  zone                   = "1"
+  name                          = "${local.name}-pg"
+  resource_group_name           = azurerm_resource_group.app.name
+  location                      = azurerm_resource_group.app.location
+  version                       = "16"
+  administrator_login           = var.db_admin_username
+  administrator_password        = random_password.db.result
+  sku_name                      = "B_Standard_B1ms"
+  storage_mb                    = 32768
+  zone                          = "1"
+  public_network_access_enabled = true
+  backup_retention_days         = var.postgres_backup_retention_days
 
   authentication {
     password_auth_enabled = true
@@ -137,11 +156,23 @@ resource "azurerm_postgresql_flexible_server_database" "app" {
   collation = "en_US.utf8"
 }
 
+# Azure sentinel 0.0.0.0/0.0.0.0 = allow Azure services (not the public internet).
 resource "azurerm_postgresql_flexible_server_firewall_rule" "allow_azure" {
   name             = "AllowAzureServices"
   server_id        = azurerm_postgresql_flexible_server.app.id
   start_ip_address = "0.0.0.0"
   end_ip_address   = "0.0.0.0"
+}
+
+resource "azurerm_postgresql_flexible_server_firewall_rule" "admin_cidrs" {
+  for_each = {
+    for idx, cidr in var.db_admin_cidrs : format("admin-%02d", idx) => cidr
+  }
+
+  name             = each.key
+  server_id        = azurerm_postgresql_flexible_server.app.id
+  start_ip_address = cidrhost(each.value, 0)
+  end_ip_address   = cidrhost(each.value, -1)
 }
 
 locals {
@@ -182,6 +213,11 @@ resource "azurerm_container_app" "app" {
     value = random_password.jwt.result
   }
 
+  secret {
+    name  = "signup-invite-code"
+    value = random_password.signup_invite.result
+  }
+
   template {
     min_replicas = 1
     max_replicas = 2
@@ -213,6 +249,11 @@ resource "azurerm_container_app" "app" {
       }
 
       env {
+        name  = "ALLOW_PUBLIC_SIGNUP"
+        value = "false"
+      }
+
+      env {
         name        = "DATABASE_URL"
         secret_name = "database-url"
       }
@@ -220,6 +261,11 @@ resource "azurerm_container_app" "app" {
       env {
         name        = "JWT_SECRET"
         secret_name = "jwt-secret"
+      }
+
+      env {
+        name        = "SIGNUP_INVITE_CODE"
+        secret_name = "signup-invite-code"
       }
     }
   }
@@ -237,6 +283,7 @@ resource "azurerm_container_app" "app" {
 
   depends_on = [
     azurerm_postgresql_flexible_server_firewall_rule.allow_azure,
+    azurerm_postgresql_flexible_server_firewall_rule.admin_cidrs,
   ]
 }
 
@@ -263,4 +310,10 @@ output "dashboard_url" {
 
 output "postgres_fqdn" {
   value = azurerm_postgresql_flexible_server.app.fqdn
+}
+
+output "signup_invite_code" {
+  value     = random_password.signup_invite.result
+  sensitive = true
+  description = "Share with approved users so they can create accounts."
 }
