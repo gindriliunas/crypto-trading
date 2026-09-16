@@ -176,12 +176,14 @@ jobs:
     # Hard gate on workflow_dispatch for ad-hoc Security Scans runs.
     continue-on-error: ${{ github.event_name != 'workflow_dispatch' }}
     steps:
+      - uses: actions/checkout@v4
       - name: ZAP baseline against live dev
         uses: zaproxy/action-baseline@v0.14.0
         with:
           target: "https://dev.gindri.com"
           fail_action: true
           allow_issue_writing: false
+          rules_file_name: ".zap/rules.tsv"
           cmd_options: "-a"
 
   summary:

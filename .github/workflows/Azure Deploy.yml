@@ -162,6 +162,7 @@ jobs:
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
       - name: Wait for /api/health
         run: |
           set -e
@@ -181,6 +182,7 @@ jobs:
           target: "https://dev.gindri.com"
           fail_action: true
           allow_issue_writing: false
+          rules_file_name: ".zap/rules.tsv"
           cmd_options: "-a"
 
   deploy-manual:
@@ -268,6 +270,7 @@ jobs:
     if: github.event_name == 'workflow_dispatch' && inputs.environment == 'dev'
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
       - name: Wait for /api/health
         run: |
           set -e
@@ -287,4 +290,5 @@ jobs:
           target: "https://dev.gindri.com"
           fail_action: true
           allow_issue_writing: false
+          rules_file_name: ".zap/rules.tsv"
           cmd_options: "-a"
