@@ -247,27 +247,30 @@ resource "time_sleep" "wait_kv_rbac" {
 }
 
 resource "azurerm_key_vault_secret" "database_url" {
-  name         = "database-url"
-  value        = local.database_url
-  key_vault_id = azurerm_key_vault.app.id
-  content_type = "text/plain"
-  depends_on   = [time_sleep.wait_kv_rbac]
+  name            = "database-url"
+  value           = local.database_url
+  key_vault_id    = azurerm_key_vault.app.id
+  content_type    = "text/plain"
+  expiration_date = "2030-01-01T00:00:00Z"
+  depends_on      = [time_sleep.wait_kv_rbac]
 }
 
 resource "azurerm_key_vault_secret" "jwt_secret" {
-  name         = "jwt-secret"
-  value        = random_password.jwt.result
-  key_vault_id = azurerm_key_vault.app.id
-  content_type = "text/plain"
-  depends_on   = [time_sleep.wait_kv_rbac]
+  name            = "jwt-secret"
+  value           = random_password.jwt.result
+  key_vault_id    = azurerm_key_vault.app.id
+  content_type    = "text/plain"
+  expiration_date = "2030-01-01T00:00:00Z"
+  depends_on      = [time_sleep.wait_kv_rbac]
 }
 
 resource "azurerm_key_vault_secret" "signup_invite" {
-  name         = "signup-invite-code"
-  value        = random_password.signup_invite.result
-  key_vault_id = azurerm_key_vault.app.id
-  content_type = "text/plain"
-  depends_on   = [time_sleep.wait_kv_rbac]
+  name            = "signup-invite-code"
+  value           = random_password.signup_invite.result
+  key_vault_id    = azurerm_key_vault.app.id
+  content_type    = "text/plain"
+  expiration_date = "2030-01-01T00:00:00Z"
+  depends_on      = [time_sleep.wait_kv_rbac]
 }
 
 resource "azurerm_container_app" "app" {

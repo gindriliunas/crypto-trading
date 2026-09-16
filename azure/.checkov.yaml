@@ -1,7 +1,22 @@
 # Documented Checkov skips for accepted Azure learning-stack trade-offs.
-# Prefer private Postgres VNet later; until then FIREWALL_RULES.md owns the risk register.
+# Prefer private Postgres VNet / ACR MI / Key Vault private endpoint later.
 skip-check:
-  - CKV_AZURE_7   # Ensure PostgreSQL server enables threat detection (Flexible Server variant)
-  - CKV_AZURE_102 # Ensure Azure PostgreSQL Flexible Server has geo-redundant backups
-  - CKV_AZURE_190 # Ensure ACR admin account is disabled (CI uses admin for docker push)
-  - CKV2_AZURE_57 # Ensure PostgreSQL Flexible Server is not public (Azure services firewall)
+  # Postgres public + Azure-services firewall (see azure/FIREWALL_RULES.md)
+  - CKV_AZURE_7
+  - CKV_AZURE_102
+  - CKV_AZURE_136
+  - CKV2_AZURE_57
+  - CKV2_AZURE_26
+  # ACR Basic + admin for CI docker push (ISO residual: disable admin + MI later)
+  - CKV_AZURE_190
+  - CKV_AZURE_137
+  - CKV_AZURE_139
+  - CKV_AZURE_164
+  - CKV_AZURE_165
+  - CKV_AZURE_166
+  - CKV_AZURE_167
+  - CKV_AZURE_233
+  - CKV_AZURE_237
+  # Key Vault: public access with Deny ACL + AzureServices bypass (needed for CA secret refs without private endpoints)
+  - CKV_AZURE_189
+  - CKV2_AZURE_32
