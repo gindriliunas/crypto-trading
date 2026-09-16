@@ -217,7 +217,7 @@ export function Dashboard() {
               ? `Prices updated ${timeAgo(lastUpdated)} · refreshes every 30s`
               : "Loading live prices…"}
             {signedIn
-              ? " · account history in RDS"
+              ? " · account history in Postgres"
               : " · guest mode uses this browser only"}
           </p>
           {loadError ? <p className="mt-1 text-sm text-rose-400">{loadError}</p> : null}

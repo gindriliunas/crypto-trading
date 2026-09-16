@@ -142,8 +142,6 @@ Technical controls (vuln management, IaC, TLS, SSDLC, env separation) are the st
 | Merge/push to `main` | `dev` | Security Scans + apply + image scan + ACR push + Container App |
 | **Actions → Azure Deploy → Run workflow** | `staging` / `production` | Manual apply (image scanned before push) |
 
-Legacy AWS tear-down (if anything remains): **AWS Destroy** (`workflow_dispatch` only).
-
 ### GitHub setup (once)
 
 **Settings → Environments**
@@ -160,8 +158,6 @@ Legacy AWS tear-down (if anything remains): **AWS Destroy** (`workflow_dispatch`
 | `ARM_CLIENT_SECRET` | SP password |
 | `ARM_SUBSCRIPTION_ID` | Subscription |
 | `ARM_TENANT_ID` | Entra tenant |
-
-Optional (AWS Destroy only): `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`
 
 ### Day-to-day
 

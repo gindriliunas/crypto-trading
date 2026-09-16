@@ -30,7 +30,7 @@ Status key: **Aligns** | **Partial** | **Gap** | **Org** (operator device/SaaS e
 | Network / cloud boundary | Azure subscription hosting `crypto-trading-*` resource groups; GitHub `gindriliunas/crypto-trading`; DNS `gindri.com` / `dev.gindri.com` |
 | Physical locations | Primary operator workstation(s) + home working (list addresses before CE submission) |
 | In scope | Azure Container Apps, ACR, Postgres Flexible Server, Log Analytics; GitHub Actions; GoDaddy DNS; operator devices used to administer the above |
-| Out of scope (justify to CB) | Legacy AWS root Terraform (destroyed in AWS; code retained for reference only) |
+| Out of scope (justify to CB) | None by default — keep cloud inventory current |
 
 ### Asset inventory
 

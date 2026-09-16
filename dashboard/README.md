@@ -1,44 +1,45 @@
-# Crypto paper-trading dashboard
+# Dashboard
 
-Next.js app with live CoinGecko prices and simulated buy/sell trades.
+Next.js paper-trading UI. Auth is JWT + bcrypt against Azure Postgres.
 
-- **Signed in (Cognito):** portfolio and trade history are stored per user in **RDS Postgres**
-- **Guest / local without Cognito:** trades stay in browser `localStorage`
+- **Signed in:** portfolio and trade history stored per user in Postgres  
+- **Guest / no auth env:** trades stay in browser `localStorage`
 
-No exchange API keys and no real orders.
-
-## Local
+## Local development
 
 ```bash
-cd dashboard
 npm install
 npm run dev
 ```
 
-Open http://localhost:3000
+Optional: copy `.env.example` to `.env.local`:
 
-Optional: copy `.env.example` to `.env.local` and set Cognito + `DATABASE_URL` (RDS is private — local access needs a tunnel).
+```bash
+JWT_SECRET=dev-only-long-random-string
+DATABASE_URL=postgresql://user:pass@host:5432/papertrading?sslmode=require
+AUTH_COOKIE_SECURE=false
+ALLOW_PUBLIC_SIGNUP=true
+# or: SIGNUP_INVITE_CODE=your-invite
+```
 
-## Auth and history
+## Auth flow (brief)
 
-1. Sign up / sign in (Cognito email + password)
-2. Buy/sell paper trades — saved per Cognito user in Postgres
-3. Sign in later to see the same history / P&L
+1. Sign up (invite code required in Azure) or sign in with email/password  
+2. Server verifies password (bcrypt), issues a JWT in httpOnly cookie `paper_id_token`  
+3. Buy/sell paper trades — saved per user id in Postgres  
 
 ## Docker
 
 ```bash
-docker build -t crypto-dashboard .
+docker build -t crypto-trading-dashboard .
 docker run --rm -p 3000:3000 \
-  -e COGNITO_USER_POOL_ID=... \
-  -e COGNITO_CLIENT_ID=... \
-  -e DATABASE_URL=... \
-  -e AWS_REGION=eu-west-2 \
-  crypto-dashboard
+  -e JWT_SECRET=... \
+  -e DATABASE_URL=postgresql://... \
+  -e AUTH_COOKIE_SECURE=false \
+  -e SIGNUP_INVITE_CODE=... \
+  crypto-trading-dashboard
 ```
 
-## ECS Express Mode
+## Azure deploy
 
-Root Terraform deploys Cognito, private RDS, ECR, and an **ECS Express Mode** service (managed HTTPS URL + load balancing). App Runner is not used (AWS is stopping new App Runner customers).
-
-After deploy, use Terraform output `dashboard_url`. Requires Fargate vCPU quota > 0 in the region.
+Infra and image deploy live under `../azure/` and `.github/workflows/Azure Deploy.yml`. After apply, use `terraform output dashboard_url` or https://dev.gindri.com.
