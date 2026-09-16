@@ -89,7 +89,7 @@ jobs:
           ACR="${{ steps.acr.outputs.login_server }}"
           docker build -t "$ACR/crypto-trading-dev:${{ github.sha }}" -t "$ACR/crypto-trading-dev:latest" ../dashboard
       - name: Container image scan (Trivy)
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: image
           image-ref: ${{ steps.acr.outputs.login_server }}/crypto-trading-dev:${{ github.sha }}
@@ -158,7 +158,7 @@ jobs:
           NAME="${{ steps.acr.outputs.image_name }}"
           docker build -t "$ACR/$NAME:${{ github.sha }}" -t "$ACR/$NAME:latest" ../dashboard
       - name: Container image scan (Trivy)
-        uses: aquasecurity/trivy-action@0.28.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: image
           image-ref: ${{ steps.acr.outputs.login_server }}/${{ steps.acr.outputs.image_name }}:${{ github.sha }}
