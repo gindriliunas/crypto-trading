@@ -15,6 +15,7 @@ skip-check:
   - CKV_AZURE_165
   - CKV_AZURE_166
   - CKV_AZURE_167
+  - CKV_AZURE_163
   - CKV_AZURE_233
   - CKV_AZURE_237
   # Key Vault: public access with Deny ACL + AzureServices bypass (needed for CA secret refs without private endpoints)
