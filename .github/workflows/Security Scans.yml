@@ -1,6 +1,6 @@
 name: Security Scans
 
-# SAST | SCA | Secrets | Terraform (IaC) | Container image
+# Gitleaks → Trivy SCA → CodeQL → Checkov+tfsec+Trivy IaC → Trivy image → OWASP ZAP
 on:
   pull_request:
     branches: [main]
@@ -33,7 +33,7 @@ jobs:
           category: "/language:javascript-typescript"
 
   sca:
-    name: SCA (dependencies)
+    name: SCA (Trivy dependencies)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -46,10 +46,17 @@ jobs:
           severity: CRITICAL,HIGH
           ignore-unfixed: true
           exit-code: "1"
-          format: table
+          format: sarif
+          output: trivy-sca.sarif
+      - name: Upload SCA SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-sca.sarif
+          category: trivy-sca
 
   secrets:
-    name: Secrets scan
+    name: Secrets (Gitleaks + Trivy)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -70,7 +77,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   terraform:
-    name: Terraform / IaC scan
+    name: IaC (Trivy + Checkov + tfsec)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -81,10 +88,43 @@ jobs:
           scan-ref: azure
           severity: CRITICAL,HIGH
           exit-code: "1"
-          format: table
+          format: sarif
+          output: trivy-iac.sarif
+      - name: Upload Trivy IaC SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-iac.sarif
+          category: trivy-iac
+      - name: Checkov
+        uses: bridgecrewio/checkov-action@v12
+        with:
+          directory: azure
+          framework: terraform
+          soft_fail: false
+          config_file: azure/.checkov.yaml
+          output_format: cli,sarif
+          output_file_path: console,checkov.sarif
+      - name: Upload Checkov SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: checkov.sarif
+          category: checkov
+      - name: tfsec
+        uses: aquasecurity/tfsec-sarif-action@v0.1.4
+        with:
+          working_directory: azure
+          sarif_file: tfsec.sarif
+      - name: Upload tfsec SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: tfsec.sarif
+          category: tfsec
 
   container:
-    name: Container image scan
+    name: Container (Trivy image)
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -109,4 +149,54 @@ jobs:
           severity: CRITICAL,HIGH
           ignore-unfixed: true
           exit-code: "1"
-          format: table
+          format: sarif
+          output: trivy-image.sarif
+      - name: Upload image SARIF
+        if: always()
+        uses: github/codeql-action/upload-sarif@v3
+        with:
+          sarif_file: trivy-image.sarif
+          category: trivy-image
+
+  dast:
+    name: DAST (OWASP ZAP)
+    runs-on: ubuntu-latest
+    # Full gate on main / manual; on PRs still run but do not block if staging URL flaps
+    continue-on-error: ${{ github.event_name == 'pull_request' }}
+    steps:
+      - name: ZAP baseline against live dev
+        uses: zaproxy/action-baseline@v0.14.0
+        with:
+          target: "https://dev.gindri.com"
+          fail_action: true
+          allow_issue_writing: false
+          cmd_options: "-a"
+
+  summary:
+    name: Security gate summary
+    runs-on: ubuntu-latest
+    if: always()
+    needs: [sast, sca, secrets, terraform, container, dast]
+    steps:
+      - name: Recruiter-readable gate report
+        run: |
+          echo "## DevSecOps security gates" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Layer | Job | Result |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|-------|-----|--------|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| SAST | CodeQL | ${{ needs.sast.result }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| SCA | Trivy fs | ${{ needs.sca.result }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Secrets | Gitleaks + Trivy | ${{ needs.secrets.result }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| IaC | Trivy + Checkov + tfsec | ${{ needs.terraform.result }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Container | Trivy image | ${{ needs.container.result }} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| DAST | OWASP ZAP | ${{ needs.dast.result }} |" >> "$GITHUB_STEP_SUMMARY"
+          for r in "${{ needs.sast.result }}" "${{ needs.sca.result }}" "${{ needs.secrets.result }}" "${{ needs.terraform.result }}" "${{ needs.container.result }}"; do
+            if [ "$r" != "success" ]; then
+              echo "Blocking gate failed: $r"
+              exit 1
+            fi
+          done
+          if [ "${{ github.event_name }}" != "pull_request" ] && [ "${{ needs.dast.result }}" != "success" ]; then
+            echo "DAST failed on main/manual run"
+            exit 1
+          fi

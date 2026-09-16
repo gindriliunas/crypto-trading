@@ -132,8 +132,8 @@ flowchart TB
 | GET | `/api/health` | No | Liveness `{ ok: true }` |
 | GET | `/api/markets` | No | CoinGecko watchlist, 30s revalidate |
 | GET | `/api/auth/me` | Cookie | Session user or `{ configured, user: null }` |
-| POST | `/api/auth/signup` | No | Create user (password ≥ 8) |
-| POST | `/api/auth/login` | No | Set JWT cookie, 7-day maxAge |
+| POST | `/api/auth/signup` | No | Create user (password ≥ 12; invite when configured) |
+| POST | `/api/auth/login` | No | Set JWT cookie, 7-day maxAge; lockout after failures |
 | POST | `/api/auth/logout` | Cookie | Clear cookie |
 | GET | `/api/portfolio` | Yes | Load or create portfolio (`$10,000` start) |
 | POST | `/api/trades` | Yes | Buy/sell; persist in a transaction |
@@ -152,6 +152,7 @@ erDiagram
     text email UK
     text password_hash
     timestamptz created_at
+    timestamptz disabled_at
   }
   portfolios {
     text user_sub PK
@@ -201,10 +202,11 @@ sequenceDiagram
   participant Auth as lib/auth
   participant DB as PostgreSQL
 
-  User->>UI: email + password
+  User->>UI: email + password (+ invite if required)
   UI->>API: JSON body
-  API->>API: trim/lower email; length ≥ 8
-  API->>Auth: signUp(email, password)
+  API->>API: trim/lower email; password ≥ 12 + complexity
+  API->>Auth: signUp(email, password, inviteCode)
+  Auth->>Auth: validate invite when SIGNUP_INVITE_CODE set
   Auth->>DB: ensure users table
   Auth->>DB: SELECT id WHERE email
   alt email exists
@@ -231,10 +233,10 @@ sequenceDiagram
   User->>UI: email + password
   UI->>Login: JSON body
   Login->>Auth: signIn(email, password)
-  Auth->>DB: SELECT user by email
-  Auth->>Auth: bcrypt.compare
-  alt invalid
-    Login-->>UI: 401
+  Auth->>DB: SELECT user by email (reject if disabled_at set)
+  Auth->>Auth: bcrypt.compare; record lockout on failure
+  alt invalid or locked
+    Login-->>UI: 401 / 429
   else valid
     Auth->>Auth: SignJWT HS256, exp 7d
     Login-->>UI: Set-Cookie paper_id_token
@@ -392,7 +394,7 @@ flowchart LR
   stg --> prod[production]
 ```
 
-Security Scans (every PR and push to `main`): CodeQL (SAST), Trivy fs/SCA, Trivy secrets + Gitleaks, Trivy Terraform, Trivy container. Deploy re-scans the image before ACR push.
+Security Scans (every PR and push to `main`): Gitleaks + Trivy secrets, Trivy SCA, CodeQL (SAST), Trivy + Checkov + tfsec (IaC), Trivy container, OWASP ZAP baseline (DAST vs live URL on `main`). SARIF uploads to the GitHub Security tab. Deploy re-scans the image before ACR push.
 
 ---
 
@@ -425,7 +427,7 @@ flowchart TB
   Next -->|read-only prices| CoinGecko
 ```
 
-- Passwords stored as bcrypt (cost 10); JWT never includes the hash.
+- Passwords ≥ 12 with complexity checks; bcrypt (cost 10); JWT never includes the hash. Optional invite-gated signup; `users.disabled_at` for operator disable; login lockout after repeated failures.
 - SQL via parameterized `pg` queries; schema bootstrap is static DDL.
 - Runtime image: Alpine patched, npm/yarn/corepack removed, non-root `nextjs`.
 - No live exchange orders; cash and fills are simulated only.
