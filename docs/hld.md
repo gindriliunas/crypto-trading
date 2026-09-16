@@ -74,8 +74,8 @@ flowchart TB
 | ACR | `cryptotrading{env}acr` | Image `{name}:{git-sha}` |
 | Postgres | `crypto-trading-{env}-pg` | Admin `paperadmin`; DB `papertrading` |
 | Log Analytics | `crypto-trading-{env}-logs` | 30-day retention |
-| Key Vault | `cryptotrading{env}kv` | `database-url`, `jwt-secret`, `signup-invite-code` |
-| Managed identity | `crypto-trading-{env}-uai` | Key Vault Secrets User for Container App |
+| Key Vault | `cryptotrading{env}kv` | `database-url`, `jwt-secret`, `signup-invite-code` (access policies) |
+| Managed identity | `crypto-trading-{env}-uai` | Key Vault Get/List for Container App secret refs |
 
 **Secrets** (Azure Key Vault → Container Apps secret references via user-assigned managed identity):
 

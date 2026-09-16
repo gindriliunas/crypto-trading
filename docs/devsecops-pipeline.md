@@ -18,7 +18,7 @@ Shift-left gates for the paper-trading dashboard. Workflow: `.github/workflows/S
 
 SARIF from Trivy / Checkov / tfsec / CodeQL is uploaded to the GitHub **Security** tab (`security-events: write`).
 
-App secrets (`DATABASE_URL`, `JWT_SECRET`, invite) are stored in **Azure Key Vault** and injected into Container Apps via **user-assigned managed identity** (not plaintext CA secret values).
+App secrets (`DATABASE_URL`, `JWT_SECRET`, invite) are stored in **Azure Key Vault** and injected into Container Apps via **user-assigned managed identity** (Key Vault access policy Get/List — works with a Contributor CI SP without `roleAssignments/write`).
 
 ## Pipeline diagram
 
