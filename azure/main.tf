@@ -215,6 +215,12 @@ resource "azurerm_key_vault" "app" {
   purge_protection_enabled   = var.environment == "production"
   rbac_authorization_enabled = true
   tags                       = local.tags
+
+  # Deny by default; AzureServices bypass lets Container Apps MI resolve secret refs.
+  network_acls {
+    default_action = "Deny"
+    bypass         = "AzureServices"
+  }
 }
 
 # Terraform / CI principal creates and updates secret values
