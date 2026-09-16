@@ -18,6 +18,7 @@ skip-check:
   - CKV_AZURE_163
   - CKV_AZURE_233
   - CKV_AZURE_237
-  # Key Vault: public access with Deny ACL + AzureServices bypass (needed for CA secret refs without private endpoints)
+  # Key Vault: public data plane Allow for GitHub Actions secret writes (see azure/.trivyignore AZU-0013)
   - CKV_AZURE_189
+  - CKV_AZURE_109
   - CKV2_AZURE_32
