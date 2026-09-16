@@ -1,0 +1,9 @@
+# ZAP baseline rules — tab-separated: ruleId	action	reason
+# IGNORE informational noise / false positives; real header gaps are fixed in next.config.ts
+10015	IGNORE	(Cache-Control informational)
+10049	IGNORE	(Cacheability informational for SPA/API)
+10094	IGNORE	(Base64 in Next.js assets is not a secret leak)
+10099	IGNORE	(False positive on UI copy containing the word Select)
+10109	IGNORE	(Modern Web Application informational)
+90004	IGNORE	(COOP/COEP/CORP optional; can break Next.js)
+90005	IGNORE	(Sec-Fetch-* are browser request headers, not response controls)
