@@ -7,3 +7,4 @@
 10109	IGNORE	(Modern Web Application informational)
 90004	IGNORE	(COOP/COEP/CORP optional; can break Next.js)
 90005	IGNORE	(Sec-Fetch-* are browser request headers, not response controls)
+10055	IGNORE	(Next.js App Router needs script/style 'unsafe-inline' without nonce middleware)
