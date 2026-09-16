@@ -37,6 +37,8 @@ jobs:
     steps:
       - name: Skip Azure plan for Dependabot
         if: github.actor == 'dependabot[bot]'
+        # Job default is azure/, but checkout is skipped for Dependabot — run from workspace root.
+        working-directory: ${{ github.workspace }}
         run: |
           echo "Dependabot PRs cannot read Actions secrets."
           echo "Azure terraform plan is skipped here; Security Scans still gate the PR."
