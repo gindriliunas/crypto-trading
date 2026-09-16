@@ -16,22 +16,45 @@ on:
 permissions:
   contents: read
 
+# Service principal auth for Terraform + azurerm backend (use_azuread_auth).
+# Must be non-empty repo (or Environment) secrets — empty values make Terraform fall back to `az login`.
 env:
   ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }}
   ARM_CLIENT_SECRET: ${{ secrets.ARM_CLIENT_SECRET }}
   ARM_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }}
   ARM_TENANT_ID: ${{ secrets.ARM_TENANT_ID }}
+  ARM_USE_CLI: false
 
 jobs:
   plan:
     name: Terraform Plan (Azure)
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
+    environment: dev
     defaults:
       run:
         working-directory: azure
     steps:
       - uses: actions/checkout@v4
+      - name: Require ARM secrets
+        run: |
+          missing=0
+          for v in ARM_CLIENT_ID ARM_CLIENT_SECRET ARM_SUBSCRIPTION_ID ARM_TENANT_ID; do
+            if [ -z "${!v}" ]; then
+              echo "::error::$v is empty — add it under Settings → Secrets (repo or Environment 'dev')"
+              missing=1
+            fi
+          done
+          exit $missing
+      - uses: azure/login@v2
+        with:
+          creds: |
+            {
+              "clientId": "${{ secrets.ARM_CLIENT_ID }}",
+              "clientSecret": "${{ secrets.ARM_CLIENT_SECRET }}",
+              "subscriptionId": "${{ secrets.ARM_SUBSCRIPTION_ID }}",
+              "tenantId": "${{ secrets.ARM_TENANT_ID }}"
+            }
       - uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: 1.9.8
@@ -49,10 +72,16 @@ jobs:
         working-directory: azure
     steps:
       - uses: actions/checkout@v4
-      - uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: 1.9.8
-          terraform_wrapper: false
+      - name: Require ARM secrets
+        run: |
+          missing=0
+          for v in ARM_CLIENT_ID ARM_CLIENT_SECRET ARM_SUBSCRIPTION_ID ARM_TENANT_ID; do
+            if [ -z "${!v}" ]; then
+              echo "::error::$v is empty — add it under Settings → Secrets and variables → Actions (and/or Environment 'dev')"
+              missing=1
+            fi
+          done
+          exit $missing
       - uses: azure/login@v2
         with:
           creds: |
@@ -62,6 +91,10 @@ jobs:
               "subscriptionId": "${{ secrets.ARM_SUBSCRIPTION_ID }}",
               "tenantId": "${{ secrets.ARM_TENANT_ID }}"
             }
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.8
+          terraform_wrapper: false
       - name: Terraform init
         run: terraform init -reconfigure -backend-config=backends/dev.hcl
       - name: Create registry and database first
@@ -71,6 +104,7 @@ jobs:
             -target=azurerm_container_registry.app \
             -target=random_password.db \
             -target=random_password.jwt \
+            -target=random_password.signup_invite \
             -target=azurerm_postgresql_flexible_server.app \
             -target=azurerm_postgresql_flexible_server_database.app \
             -target=azurerm_postgresql_flexible_server_firewall_rule.allow_azure \
@@ -118,10 +152,16 @@ jobs:
         working-directory: azure
     steps:
       - uses: actions/checkout@v4
-      - uses: hashicorp/setup-terraform@v3
-        with:
-          terraform_version: 1.9.8
-          terraform_wrapper: false
+      - name: Require ARM secrets
+        run: |
+          missing=0
+          for v in ARM_CLIENT_ID ARM_CLIENT_SECRET ARM_SUBSCRIPTION_ID ARM_TENANT_ID; do
+            if [ -z "${!v}" ]; then
+              echo "::error::$v is empty — add it under Settings → Secrets (repo or Environment '${{ inputs.environment }}')"
+              missing=1
+            fi
+          done
+          exit $missing
       - uses: azure/login@v2
         with:
           creds: |
@@ -131,6 +171,10 @@ jobs:
               "subscriptionId": "${{ secrets.ARM_SUBSCRIPTION_ID }}",
               "tenantId": "${{ secrets.ARM_TENANT_ID }}"
             }
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.8
+          terraform_wrapper: false
       - run: terraform init -reconfigure -backend-config=backends/${{ inputs.environment }}.hcl
       - run: |
           terraform apply -input=false -auto-approve -var-file=envs/${{ inputs.environment }}.tfvars \
@@ -138,6 +182,7 @@ jobs:
             -target=azurerm_container_registry.app \
             -target=random_password.db \
             -target=random_password.jwt \
+            -target=random_password.signup_invite \
             -target=azurerm_postgresql_flexible_server.app \
             -target=azurerm_postgresql_flexible_server_database.app \
             -target=azurerm_postgresql_flexible_server_firewall_rule.allow_azure \
