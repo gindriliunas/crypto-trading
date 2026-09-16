@@ -89,6 +89,7 @@ jobs:
           severity: CRITICAL,HIGH
           exit-code: "1"
           format: table
+          trivyignores: azure/.trivyignore
       - name: Trivy IaC SARIF (report only)
         if: always()
         uses: aquasecurity/trivy-action@v0.36.0
@@ -99,6 +100,7 @@ jobs:
           exit-code: "0"
           format: sarif
           output: trivy-iac.sarif
+          trivyignores: azure/.trivyignore
       - name: Upload Trivy IaC SARIF
         if: always() && hashFiles('trivy-iac.sarif') != ''
         uses: github/codeql-action/upload-sarif@v3

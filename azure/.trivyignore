@@ -1,0 +1,4 @@
+# Accepted residual: Key Vault network ACL Allow so GitHub-hosted Actions can manage secrets.
+# Track private endpoint + self-hosted runner as hardening follow-up (see docs/threat-model-stride.md).
+AVD-AZU-0013
+AZU-0013
