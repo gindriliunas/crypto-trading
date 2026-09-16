@@ -77,15 +77,30 @@ jobs:
             -target=azurerm_log_analytics_workspace.app \
             -target=azurerm_container_app_environment.app
       - name: Login to ACR
+        id: acr
         run: |
           ACR=$(terraform output -raw acr_login_server)
           USER=$(terraform output -raw acr_username)
           PASS=$(terraform output -raw acr_password)
           echo "$PASS" | docker login "$ACR" -u "$USER" --password-stdin
-      - name: Build and push image
+          echo "login_server=$ACR" >> "$GITHUB_OUTPUT"
+      - name: Build image
         run: |
-          ACR=$(terraform output -raw acr_login_server)
+          ACR="${{ steps.acr.outputs.login_server }}"
           docker build -t "$ACR/crypto-trading-dev:${{ github.sha }}" -t "$ACR/crypto-trading-dev:latest" ../dashboard
+      - name: Container image scan (Trivy)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: image
+          image-ref: ${{ steps.acr.outputs.login_server }}/crypto-trading-dev:${{ github.sha }}
+          scanners: vuln,secret,misconfig
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: "1"
+          format: table
+      - name: Push image
+        run: |
+          ACR="${{ steps.acr.outputs.login_server }}"
           docker push "$ACR/crypto-trading-dev:${{ github.sha }}"
           docker push "$ACR/crypto-trading-dev:latest"
       - name: Deploy Container App
@@ -129,16 +144,33 @@ jobs:
             -target=azurerm_log_analytics_workspace.app \
             -target=azurerm_container_app_environment.app
       - name: Login to ACR
+        id: acr
         run: |
           ACR=$(terraform output -raw acr_login_server)
           USER=$(terraform output -raw acr_username)
           PASS=$(terraform output -raw acr_password)
           echo "$PASS" | docker login "$ACR" -u "$USER" --password-stdin
-      - name: Build and push image
+          echo "login_server=$ACR" >> "$GITHUB_OUTPUT"
+          echo "image_name=crypto-trading-${{ inputs.environment }}" >> "$GITHUB_OUTPUT"
+      - name: Build image
         run: |
-          ACR=$(terraform output -raw acr_login_server)
-          NAME="crypto-trading-${{ inputs.environment }}"
+          ACR="${{ steps.acr.outputs.login_server }}"
+          NAME="${{ steps.acr.outputs.image_name }}"
           docker build -t "$ACR/$NAME:${{ github.sha }}" -t "$ACR/$NAME:latest" ../dashboard
+      - name: Container image scan (Trivy)
+        uses: aquasecurity/trivy-action@0.28.0
+        with:
+          scan-type: image
+          image-ref: ${{ steps.acr.outputs.login_server }}/${{ steps.acr.outputs.image_name }}:${{ github.sha }}
+          scanners: vuln,secret,misconfig
+          severity: CRITICAL,HIGH
+          ignore-unfixed: true
+          exit-code: "1"
+          format: table
+      - name: Push image
+        run: |
+          ACR="${{ steps.acr.outputs.login_server }}"
+          NAME="${{ steps.acr.outputs.image_name }}"
           docker push "$ACR/$NAME:${{ github.sha }}"
           docker push "$ACR/$NAME:latest"
       - run: terraform apply -input=false -auto-approve -var-file=envs/${{ inputs.environment }}.tfvars -var="app_image_tag=${{ github.sha }}"
