@@ -214,9 +214,11 @@ resource "azurerm_key_vault" "app" {
   rbac_authorization_enabled = false
   tags                       = local.tags
 
-  # Deny by default; AzureServices bypass lets Container Apps MI resolve secret refs.
+  # Allow public data-plane access so GitHub Actions (Contributor SP) can Set secrets.
+  # AzureServices bypass alone is not enough for Actions runner IPs. Residual: prefer
+  # private endpoint + self-hosted runner later; Container Apps MI still uses Get via access policy.
   network_acls {
-    default_action = "Deny"
+    default_action = "Allow"
     bypass         = "AzureServices"
   }
 }

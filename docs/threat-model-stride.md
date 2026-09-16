@@ -98,7 +98,8 @@ Boundaries:
 | T-T2 | SQL inputs | Tampering | SQL injection | Data breach | Low | Parameterized `pg` queries | **Done** |
 | T-T3 | Terraform | Tampering | Malicious IaC change | Infra compromise | Medium | PR + Security Scans + Terraform plan; branch protection on `main` | **Done** |
 | T-R1 | Auth events | Repudiation | Deny failed/successful logins | Weak forensics | Medium | App-level audit trail limited; Log Analytics holds container logs | **Partial** |
-| T-I1 | Secrets at rest | Info disclosure | DB URL / JWT in plaintext CA secret store | Credential theft | Low | Key Vault refs + user-assigned MI | **Done** |
+| T-I1 | Secrets at rest | Info disclosure | DB URL / JWT in plaintext CA secret store | Credential theft | Low | Key Vault + MI access policy; secrets not plaintext CA values | **Done** |
+| T-I1b | Key Vault network | Info disclosure | KV public data plane (Allow ACL for CI) | Secret theft if leaked URL + weak auth | Medium | Access policies; harden with private endpoint + self-hosted runner later | **Partial** |
 | T-I2 | Postgres network | Info disclosure | Scan/brute public Flexible Server | DB compromise | Medium | Password auth + Azure firewall; private VNet still open | **Partial** |
 | T-I3 | `/api/markets` | Info disclosure | Public market data leak | Negligible | High (by design) | Public prices only; no PII | **Accept** |
 | T-D1 | Ingress | DoS | Flood HTTPS / API | Availability loss | Medium | CA scale 1–2 replicas; Azure platform DDoS baseline | **Partial** |
