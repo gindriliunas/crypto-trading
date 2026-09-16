@@ -35,18 +35,27 @@ jobs:
       run:
         working-directory: azure
     steps:
+      - name: Skip Azure plan for Dependabot
+        if: github.actor == 'dependabot[bot]'
+        run: |
+          echo "Dependabot PRs cannot read Actions secrets."
+          echo "Azure terraform plan is skipped here; Security Scans still gate the PR."
       - uses: actions/checkout@v4
+        if: github.actor != 'dependabot[bot]'
       - name: Require ARM secrets
+        if: github.actor != 'dependabot[bot]'
         run: |
           missing=0
           for v in ARM_CLIENT_ID ARM_CLIENT_SECRET ARM_SUBSCRIPTION_ID ARM_TENANT_ID; do
             if [ -z "${!v}" ]; then
-              echo "::error::$v is empty — add it under Settings → Secrets (repo or Environment 'dev')"
+              echo "::error::$v is empty — add it under Settings → Secrets and variables → Actions (repository secrets)."
+              echo "::error::Do not create empty Environment secrets with the same names (they override repo secrets)."
               missing=1
             fi
           done
           exit $missing
       - uses: azure/login@v2
+        if: github.actor != 'dependabot[bot]'
         with:
           creds: |
             {
@@ -56,11 +65,14 @@ jobs:
               "tenantId": "${{ secrets.ARM_TENANT_ID }}"
             }
       - uses: hashicorp/setup-terraform@v3
+        if: github.actor != 'dependabot[bot]'
         with:
           terraform_version: 1.9.8
           terraform_wrapper: false
-      - run: terraform init -reconfigure -backend-config=backends/dev.hcl
-      - run: terraform plan -input=false -var-file=envs/dev.tfvars
+      - if: github.actor != 'dependabot[bot]'
+        run: terraform init -reconfigure -backend-config=backends/dev.hcl
+      - if: github.actor != 'dependabot[bot]'
+        run: terraform plan -input=false -lock-timeout=5m -var-file=envs/dev.tfvars
 
   deploy-dev:
     name: Deploy Azure Dev
@@ -99,7 +111,7 @@ jobs:
         run: terraform init -reconfigure -backend-config=backends/dev.hcl
       - name: Create registry and database first
         run: |
-          terraform apply -input=false -auto-approve -var-file=envs/dev.tfvars \
+          terraform apply -input=false -lock-timeout=5m -auto-approve -var-file=envs/dev.tfvars \
             -target=azurerm_resource_group.app \
             -target=azurerm_container_registry.app \
             -target=random_password.db \
@@ -138,7 +150,7 @@ jobs:
           docker push "$ACR/crypto-trading-dev:${{ github.sha }}"
           docker push "$ACR/crypto-trading-dev:latest"
       - name: Deploy Container App
-        run: terraform apply -input=false -auto-approve -var-file=envs/dev.tfvars -var="app_image_tag=${{ github.sha }}"
+        run: terraform apply -input=false -lock-timeout=5m -auto-approve -var-file=envs/dev.tfvars -var="app_image_tag=${{ github.sha }}"
       - name: Dashboard URL
         run: terraform output dashboard_url
 
@@ -204,7 +216,7 @@ jobs:
           terraform_wrapper: false
       - run: terraform init -reconfigure -backend-config=backends/${{ inputs.environment }}.hcl
       - run: |
-          terraform apply -input=false -auto-approve -var-file=envs/${{ inputs.environment }}.tfvars \
+          terraform apply -input=false -lock-timeout=5m -auto-approve -var-file=envs/${{ inputs.environment }}.tfvars \
             -target=azurerm_resource_group.app \
             -target=azurerm_container_registry.app \
             -target=random_password.db \
@@ -245,7 +257,7 @@ jobs:
           NAME="${{ steps.acr.outputs.image_name }}"
           docker push "$ACR/$NAME:${{ github.sha }}"
           docker push "$ACR/$NAME:latest"
-      - run: terraform apply -input=false -auto-approve -var-file=envs/${{ inputs.environment }}.tfvars -var="app_image_tag=${{ github.sha }}"
+      - run: terraform apply -input=false -lock-timeout=5m -auto-approve -var-file=envs/${{ inputs.environment }}.tfvars -var="app_image_tag=${{ github.sha }}"
       - run: terraform output dashboard_url
 
   dast-manual-dev:
