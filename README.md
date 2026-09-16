@@ -5,7 +5,7 @@
 **Live (dev):** [https://dev.gindri.com](https://dev.gindri.com)  
 **Repo:** [github.com/gindriliunas/crypto-trading](https://github.com/gindriliunas/crypto-trading)
 
-Built as a multi-cloud DevSecOps portfolio piece (Azure) alongside AWS projects — same shift-left philosophy, different cloud.
+Built as an **Azure** DevSecOps portfolio piece — live URL, Terraform multi-env, and a full shift-left security pipeline.
 
 ---
 
