@@ -88,10 +88,19 @@ jobs:
           scan-ref: azure
           severity: CRITICAL,HIGH
           exit-code: "1"
+          format: table
+      - name: Trivy IaC SARIF (report only)
+        if: always()
+        uses: aquasecurity/trivy-action@v0.36.0
+        with:
+          scan-type: config
+          scan-ref: azure
+          severity: CRITICAL,HIGH,MEDIUM,LOW
+          exit-code: "0"
           format: sarif
           output: trivy-iac.sarif
       - name: Upload Trivy IaC SARIF
-        if: always()
+        if: always() && hashFiles('trivy-iac.sarif') != ''
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: trivy-iac.sarif
@@ -106,7 +115,7 @@ jobs:
           output_format: cli,sarif
           output_file_path: console,checkov.sarif
       - name: Upload Checkov SARIF
-        if: always()
+        if: always() && hashFiles('checkov.sarif') != ''
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: checkov.sarif
@@ -115,9 +124,9 @@ jobs:
         uses: aquasecurity/tfsec-sarif-action@v0.1.4
         with:
           working_directory: azure
-          sarif_file: tfsec.sarif
+          sarif_file: ../tfsec.sarif
       - name: Upload tfsec SARIF
-        if: always()
+        if: always() && hashFiles('tfsec.sarif') != ''
         uses: github/codeql-action/upload-sarif@v3
         with:
           sarif_file: tfsec.sarif
@@ -161,8 +170,9 @@ jobs:
   dast:
     name: DAST (OWASP ZAP)
     runs-on: ubuntu-latest
-    # Full gate on main / manual; on PRs still run but do not block if staging URL flaps
-    continue-on-error: ${{ github.event_name == 'pull_request' }}
+    # Soft on PR/push (URL may be stale mid-deploy). Blocking DAST runs after Azure Deploy to dev.
+    # Hard gate on workflow_dispatch for ad-hoc Security Scans runs.
+    continue-on-error: ${{ github.event_name != 'workflow_dispatch' }}
     steps:
       - name: ZAP baseline against live dev
         uses: zaproxy/action-baseline@v0.14.0
@@ -196,7 +206,8 @@ jobs:
               exit 1
             fi
           done
-          if [ "${{ github.event_name }}" != "pull_request" ] && [ "${{ needs.dast.result }}" != "success" ]; then
-            echo "DAST failed on main/manual run"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ needs.dast.result }}" != "success" ]; then
+            echo "DAST failed on manual Security Scans run"
             exit 1
           fi
+          echo "Note: blocking DAST after deploy is job 'DAST after deploy (OWASP ZAP)' in Azure Deploy."
