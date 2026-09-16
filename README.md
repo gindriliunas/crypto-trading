@@ -60,9 +60,14 @@ flowchart LR
 
 SARIF uploads land in the GitHub **Security** tab. Full gate notes: [docs/devsecops-pipeline.md](docs/devsecops-pipeline.md).
 
-### Branch protection (recommended)
+### Branch protection (**enabled**)
 
-Require PR into `main`; require **Security Scans** jobs + **Terraform Plan (Azure)**; block direct pushes.
+`main` requires a pull request (no direct push), blocks force-pushes, and requires these status checks before merge:
+
+- Security Scans: SAST, SCA, Secrets, IaC, Container, Security gate summary  
+- Azure Deploy: Terraform Plan (Azure)  
+
+DAST after deploy runs on push to `main` once Azure Deploy finishes (not a merge check).
 
 ---
 
@@ -70,7 +75,7 @@ Require PR into `main`; require **Security Scans** jobs + **Terraform Plan (Azur
 
 ```
 Next.js · TypeScript · Tailwind
-Azure Container Apps · ACR · PostgreSQL Flexible Server · Log Analytics
+Azure Container Apps · ACR · PostgreSQL Flexible Server · Key Vault · Log Analytics
 Terraform · GitHub Actions · Dependabot
 CodeQL · Trivy · Checkov · tfsec · Gitleaks · OWASP ZAP
 ```
@@ -94,6 +99,7 @@ CodeQL · Trivy · Checkov · tfsec · Gitleaks · OWASP ZAP
 | ISO/IEC 27001:2022 | [docs/ISO27001.md](docs/ISO27001.md) |
 | Firewall rule register | [azure/FIREWALL_RULES.md](azure/FIREWALL_RULES.md) |
 | Container hardening write-up | [docs/container-hardening.md](docs/container-hardening.md) |
+| STRIDE threat model | [docs/threat-model-stride.md](docs/threat-model-stride.md) |
 | HLD / data flows | [docs/hld.md](docs/hld.md) |
 
 These are **readiness / gap analyses**, not certification claims.
@@ -105,7 +111,7 @@ These are **readiness / gap analyses**, not certification claims.
 | Trigger | Environment | Behavior |
 |---------|-------------|----------|
 | PR → `main` | — | Security Scans + `terraform plan` (dev) |
-| Push → `main` | `dev` | Scans + apply + image scan + ACR + Container App |
+| Push → `main` | `dev` | Scans + apply + image scan + ACR + Container App + **ZAP DAST** |
 | Actions → **Azure Deploy** | `staging` / `production` | Manual promote |
 
 **Secrets:** `ARM_CLIENT_ID`, `ARM_CLIENT_SECRET`, `ARM_SUBSCRIPTION_ID`, `ARM_TENANT_ID`
@@ -123,7 +129,7 @@ terraform apply -var-file=envs/dev.tfvars
 
 | Skill | How this repo shows it |
 |-------|------------------------|
-| Azure cloud architecture | Container Apps, ACR, Flexible Server, Log Analytics |
+| Azure cloud architecture | Container Apps, ACR, Flexible Server, Key Vault + MI, Log Analytics |
 | Infrastructure as Code | Multi-env Terraform + remote Blob state |
 | DevSecOps pipelines | Six-layer GitHub Actions gate + SARIF |
 | Container security | Non-root image, apk upgrade, Trivy gate |

@@ -161,8 +161,9 @@ jobs:
   dast:
     name: DAST (OWASP ZAP)
     runs-on: ubuntu-latest
-    # Full gate on main / manual; on PRs still run but do not block if staging URL flaps
-    continue-on-error: ${{ github.event_name == 'pull_request' }}
+    # Soft on PR/push (URL may be stale mid-deploy). Blocking DAST runs after Azure Deploy to dev.
+    # Hard gate on workflow_dispatch for ad-hoc Security Scans runs.
+    continue-on-error: ${{ github.event_name != 'workflow_dispatch' }}
     steps:
       - name: ZAP baseline against live dev
         uses: zaproxy/action-baseline@v0.14.0
@@ -196,7 +197,8 @@ jobs:
               exit 1
             fi
           done
-          if [ "${{ github.event_name }}" != "pull_request" ] && [ "${{ needs.dast.result }}" != "success" ]; then
-            echo "DAST failed on main/manual run"
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ needs.dast.result }}" != "success" ]; then
+            echo "DAST failed on manual Security Scans run"
             exit 1
           fi
+          echo "Note: blocking DAST after deploy is job 'DAST after deploy (OWASP ZAP)' in Azure Deploy."

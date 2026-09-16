@@ -10,6 +10,10 @@ terraform {
       source  = "hashicorp/random"
       version = "~> 3.6"
     }
+    time = {
+      source  = "hashicorp/time"
+      version = "~> 0.12"
+    }
   }
 
   # Partial backend — configure with: terraform init -backend-config=backends/dev.hcl
@@ -17,9 +21,16 @@ terraform {
 }
 
 provider "azurerm" {
-  features {}
+  features {
+    key_vault {
+      purge_soft_delete_on_destroy    = true
+      recover_soft_deleted_key_vaults = true
+    }
+  }
   subscription_id = var.subscription_id
 }
+
+data "azurerm_client_config" "current" {}
 
 variable "subscription_id" {
   type    = string
@@ -183,6 +194,73 @@ locals {
     azurerm_postgresql_flexible_server.app.fqdn,
     azurerm_postgresql_flexible_server_database.app.name,
   )
+  # Key Vault names: 3–24 chars, alphanumeric + hyphen
+  key_vault_name = substr(replace("${local.name}-kv", "-", ""), 0, 24)
+}
+
+resource "azurerm_user_assigned_identity" "app" {
+  name                = "${local.name}-uai"
+  location            = azurerm_resource_group.app.location
+  resource_group_name = azurerm_resource_group.app.name
+  tags                = local.tags
+}
+
+resource "azurerm_key_vault" "app" {
+  name                       = local.key_vault_name
+  location                   = azurerm_resource_group.app.location
+  resource_group_name        = azurerm_resource_group.app.name
+  tenant_id                  = data.azurerm_client_config.current.tenant_id
+  sku_name                   = "standard"
+  soft_delete_retention_days = 7
+  purge_protection_enabled   = var.environment == "production"
+  rbac_authorization_enabled = true
+  tags                       = local.tags
+}
+
+# Terraform / CI principal creates and updates secret values
+resource "azurerm_role_assignment" "kv_secrets_officer" {
+  scope                = azurerm_key_vault.app.id
+  role_definition_name = "Key Vault Secrets Officer"
+  principal_id         = data.azurerm_client_config.current.object_id
+}
+
+# Container App identity reads secret refs at runtime
+resource "azurerm_role_assignment" "kv_secrets_user" {
+  scope                = azurerm_key_vault.app.id
+  role_definition_name = "Key Vault Secrets User"
+  principal_id         = azurerm_user_assigned_identity.app.principal_id
+}
+
+resource "time_sleep" "wait_kv_rbac" {
+  depends_on = [
+    azurerm_role_assignment.kv_secrets_officer,
+    azurerm_role_assignment.kv_secrets_user,
+  ]
+  create_duration = "60s"
+}
+
+resource "azurerm_key_vault_secret" "database_url" {
+  name         = "database-url"
+  value        = local.database_url
+  key_vault_id = azurerm_key_vault.app.id
+  content_type = "text/plain"
+  depends_on   = [time_sleep.wait_kv_rbac]
+}
+
+resource "azurerm_key_vault_secret" "jwt_secret" {
+  name         = "jwt-secret"
+  value        = random_password.jwt.result
+  key_vault_id = azurerm_key_vault.app.id
+  content_type = "text/plain"
+  depends_on   = [time_sleep.wait_kv_rbac]
+}
+
+resource "azurerm_key_vault_secret" "signup_invite" {
+  name         = "signup-invite-code"
+  value        = random_password.signup_invite.result
+  key_vault_id = azurerm_key_vault.app.id
+  content_type = "text/plain"
+  depends_on   = [time_sleep.wait_kv_rbac]
 }
 
 resource "azurerm_container_app" "app" {
@@ -191,6 +269,11 @@ resource "azurerm_container_app" "app" {
   resource_group_name          = azurerm_resource_group.app.name
   revision_mode                = "Single"
   tags                         = local.tags
+
+  identity {
+    type         = "UserAssigned"
+    identity_ids = [azurerm_user_assigned_identity.app.id]
+  }
 
   registry {
     server               = azurerm_container_registry.app.login_server
@@ -204,18 +287,21 @@ resource "azurerm_container_app" "app" {
   }
 
   secret {
-    name  = "database-url"
-    value = local.database_url
+    name                = "database-url"
+    key_vault_secret_id = azurerm_key_vault_secret.database_url.versionless_id
+    identity            = azurerm_user_assigned_identity.app.id
   }
 
   secret {
-    name  = "jwt-secret"
-    value = random_password.jwt.result
+    name                = "jwt-secret"
+    key_vault_secret_id = azurerm_key_vault_secret.jwt_secret.versionless_id
+    identity            = azurerm_user_assigned_identity.app.id
   }
 
   secret {
-    name  = "signup-invite-code"
-    value = random_password.signup_invite.result
+    name                = "signup-invite-code"
+    key_vault_secret_id = azurerm_key_vault_secret.signup_invite.versionless_id
+    identity            = azurerm_user_assigned_identity.app.id
   }
 
   template {
@@ -313,7 +399,15 @@ output "postgres_fqdn" {
 }
 
 output "signup_invite_code" {
-  value     = random_password.signup_invite.result
-  sensitive = true
+  value       = random_password.signup_invite.result
+  sensitive   = true
   description = "Share with approved users so they can create accounts."
+}
+
+output "key_vault_name" {
+  value = azurerm_key_vault.app.name
+}
+
+output "managed_identity_client_id" {
+  value = azurerm_user_assigned_identity.app.client_id
 }

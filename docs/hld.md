@@ -74,14 +74,17 @@ flowchart TB
 | ACR | `cryptotrading{env}acr` | Image `{name}:{git-sha}` |
 | Postgres | `crypto-trading-{env}-pg` | Admin `paperadmin`; DB `papertrading` |
 | Log Analytics | `crypto-trading-{env}-logs` | 30-day retention |
+| Key Vault | `cryptotrading{env}kv` | `database-url`, `jwt-secret`, `signup-invite-code` |
+| Managed identity | `crypto-trading-{env}-uai` | Key Vault Secrets User for Container App |
 
-**Secrets** (Container App secrets, not Key Vault yet):
+**Secrets** (Azure Key Vault → Container Apps secret references via user-assigned managed identity):
 
 | Secret | Source | Injected as |
 |--------|--------|-------------|
-| `database-url` | Terraform `random_password.db` | `DATABASE_URL` |
-| `jwt-secret` | Terraform `random_password.jwt` | `JWT_SECRET` |
-| `acr-password` | ACR admin password | registry pull |
+| `database-url` | Terraform `random_password.db` → Key Vault | `DATABASE_URL` |
+| `jwt-secret` | Terraform `random_password.jwt` → Key Vault | `JWT_SECRET` |
+| `signup-invite-code` | Terraform `random_password.signup_invite` → Key Vault | `SIGNUP_INVITE_CODE` |
+| `acr-password` | ACR admin password (CA secret value) | registry pull |
 
 Other env: `NODE_ENV=production`, `PORT=3000`, `HOSTNAME=0.0.0.0`, `AUTH_COOKIE_SECURE=true`.
 
@@ -389,12 +392,13 @@ flowchart LR
   build --> trivy[Trivy image]
   trivy -->|pass| acr[Push ACR :sha]
   acr --> ca[Update Container App]
-  ca --> promote[workflow_dispatch]
+  ca --> zap[OWASP ZAP DAST]
+  zap --> promote[workflow_dispatch]
   promote --> stg[staging]
   stg --> prod[production]
 ```
 
-Security Scans (every PR and push to `main`): Gitleaks + Trivy secrets, Trivy SCA, CodeQL (SAST), Trivy + Checkov + tfsec (IaC), Trivy container, OWASP ZAP baseline (DAST vs live URL on `main`). SARIF uploads to the GitHub Security tab. Deploy re-scans the image before ACR push.
+Security Scans (every PR and push to `main`): Gitleaks + Trivy secrets, Trivy SCA, CodeQL (SAST), Trivy + Checkov + tfsec (IaC), Trivy container. OWASP ZAP also runs in Security Scans (soft on PR/push). **Blocking DAST** is `DAST after deploy (OWASP ZAP)` in Azure Deploy against `https://dev.gindri.com` after health checks. Deploy re-scans the image before ACR push. Secrets for the app come from Key Vault via managed identity.
 
 ---
 
@@ -413,7 +417,7 @@ flowchart TB
 
   subgraph App["Trusted compute"]
     Next[Next.js process]
-    Secrets[CA secrets:<br/>DATABASE_URL, JWT_SECRET]
+    Secrets[Key Vault refs via MI:<br/>DATABASE_URL, JWT_SECRET]
   end
 
   subgraph Data["Trusted data"]

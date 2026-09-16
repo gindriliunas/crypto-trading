@@ -68,7 +68,7 @@ Status key: **Aligns** | **Partial** | **Gap** | **Org** (operator device/SaaS e
 | HTTPS / TLS | **Aligns** | Container Apps + custom domain; Postgres `sslmode=require` |
 | Secure cookies | **Aligns** | `httpOnly`, `sameSite=lax`, `AUTH_COOKIE_SECURE=true` |
 | Device lock / auto-run | **Org** | Device checklist |
-| Key Vault | **Partial** | Container App + GitHub secrets; Key Vault still optional hardening |
+| Key Vault | **Aligns** | DB URL, JWT, invite in Key Vault; Container App uses managed identity secret refs |
 
 ### 3. Security update management
 
@@ -109,6 +109,7 @@ Status key: **Aligns** | **Partial** | **Gap** | **Org** (operator device/SaaS e
 | Secrets (Trivy + Gitleaks) | **Aligns** |
 | Terraform IaC (Trivy) | **Aligns** |
 | Container image (Trivy) | **Aligns** |
+| DAST (OWASP ZAP after deploy) | **Aligns** |
 
 ---
 
@@ -178,4 +179,4 @@ Login rejects disabled accounts. Re-enable: `UPDATE users SET disabled_at = NULL
 1. Complete MFA + device checklists (Org)  
 2. Fill scope locations and full SaaS list  
 3. Keep firewall register and Dependabot PRs current  
-4. Optional: Azure Key Vault + private Postgres VNet for stronger network boundary  
+4. Optional: private Postgres VNet for stronger network boundary  

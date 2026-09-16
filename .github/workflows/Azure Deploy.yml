@@ -142,6 +142,33 @@ jobs:
       - name: Dashboard URL
         run: terraform output dashboard_url
 
+  dast-dev:
+    name: DAST after deploy (OWASP ZAP)
+    needs: deploy-dev
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wait for /api/health
+        run: |
+          set -e
+          for i in $(seq 1 36); do
+            if curl -fsS "https://dev.gindri.com/api/health" | grep -q '"ok"'; then
+              echo "Healthy after attempt $i"
+              exit 0
+            fi
+            echo "Waiting for app ($i/36)..."
+            sleep 10
+          done
+          echo "dev.gindri.com did not become healthy in time"
+          exit 1
+      - name: OWASP ZAP baseline against live dev
+        uses: zaproxy/action-baseline@v0.14.0
+        with:
+          target: "https://dev.gindri.com"
+          fail_action: true
+          allow_issue_writing: false
+          cmd_options: "-a"
+
   deploy-manual:
     name: Deploy Azure ${{ inputs.environment }}
     if: github.event_name == 'workflow_dispatch'
@@ -220,3 +247,30 @@ jobs:
           docker push "$ACR/$NAME:latest"
       - run: terraform apply -input=false -auto-approve -var-file=envs/${{ inputs.environment }}.tfvars -var="app_image_tag=${{ github.sha }}"
       - run: terraform output dashboard_url
+
+  dast-manual-dev:
+    name: DAST after manual deploy (OWASP ZAP)
+    needs: deploy-manual
+    if: github.event_name == 'workflow_dispatch' && inputs.environment == 'dev'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Wait for /api/health
+        run: |
+          set -e
+          for i in $(seq 1 36); do
+            if curl -fsS "https://dev.gindri.com/api/health" | grep -q '"ok"'; then
+              echo "Healthy after attempt $i"
+              exit 0
+            fi
+            echo "Waiting for app ($i/36)..."
+            sleep 10
+          done
+          echo "dev.gindri.com did not become healthy in time"
+          exit 1
+      - name: OWASP ZAP baseline against live dev
+        uses: zaproxy/action-baseline@v0.14.0
+        with:
+          target: "https://dev.gindri.com"
+          fail_action: true
+          allow_issue_writing: false
+          cmd_options: "-a"
