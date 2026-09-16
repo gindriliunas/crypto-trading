@@ -10,10 +10,6 @@ terraform {
       source  = "hashicorp/random"
       version = "~> 3.6"
     }
-    time = {
-      source  = "hashicorp/time"
-      version = "~> 0.12"
-    }
   }
 
   # Partial backend — configure with: terraform init -backend-config=backends/dev.hcl
@@ -214,7 +210,8 @@ resource "azurerm_key_vault" "app" {
   sku_name                   = "standard"
   soft_delete_retention_days = 7
   purge_protection_enabled   = var.environment == "production"
-  rbac_authorization_enabled = true
+  # Access policies (not RBAC) so the CI Contributor SP can grant secret rights without roleAssignments/write.
+  rbac_authorization_enabled = false
   tags                       = local.tags
 
   # Deny by default; AzureServices bypass lets Container Apps MI resolve secret refs.
@@ -225,25 +222,31 @@ resource "azurerm_key_vault" "app" {
 }
 
 # Terraform / CI principal creates and updates secret values
-resource "azurerm_role_assignment" "kv_secrets_officer" {
-  scope                = azurerm_key_vault.app.id
-  role_definition_name = "Key Vault Secrets Officer"
-  principal_id         = data.azurerm_client_config.current.object_id
+resource "azurerm_key_vault_access_policy" "terraform" {
+  key_vault_id = azurerm_key_vault.app.id
+  tenant_id    = data.azurerm_client_config.current.tenant_id
+  object_id    = data.azurerm_client_config.current.object_id
+
+  secret_permissions = [
+    "Get",
+    "List",
+    "Set",
+    "Delete",
+    "Purge",
+    "Recover",
+  ]
 }
 
 # Container App identity reads secret refs at runtime
-resource "azurerm_role_assignment" "kv_secrets_user" {
-  scope                = azurerm_key_vault.app.id
-  role_definition_name = "Key Vault Secrets User"
-  principal_id         = azurerm_user_assigned_identity.app.principal_id
-}
+resource "azurerm_key_vault_access_policy" "app" {
+  key_vault_id = azurerm_key_vault.app.id
+  tenant_id    = data.azurerm_client_config.current.tenant_id
+  object_id    = azurerm_user_assigned_identity.app.principal_id
 
-resource "time_sleep" "wait_kv_rbac" {
-  depends_on = [
-    azurerm_role_assignment.kv_secrets_officer,
-    azurerm_role_assignment.kv_secrets_user,
+  secret_permissions = [
+    "Get",
+    "List",
   ]
-  create_duration = "60s"
 }
 
 resource "azurerm_key_vault_secret" "database_url" {
@@ -252,7 +255,7 @@ resource "azurerm_key_vault_secret" "database_url" {
   key_vault_id    = azurerm_key_vault.app.id
   content_type    = "text/plain"
   expiration_date = "2030-01-01T00:00:00Z"
-  depends_on      = [time_sleep.wait_kv_rbac]
+  depends_on      = [azurerm_key_vault_access_policy.terraform]
 }
 
 resource "azurerm_key_vault_secret" "jwt_secret" {
@@ -261,7 +264,7 @@ resource "azurerm_key_vault_secret" "jwt_secret" {
   key_vault_id    = azurerm_key_vault.app.id
   content_type    = "text/plain"
   expiration_date = "2030-01-01T00:00:00Z"
-  depends_on      = [time_sleep.wait_kv_rbac]
+  depends_on      = [azurerm_key_vault_access_policy.terraform]
 }
 
 resource "azurerm_key_vault_secret" "signup_invite" {
@@ -270,7 +273,7 @@ resource "azurerm_key_vault_secret" "signup_invite" {
   key_vault_id    = azurerm_key_vault.app.id
   content_type    = "text/plain"
   expiration_date = "2030-01-01T00:00:00Z"
-  depends_on      = [time_sleep.wait_kv_rbac]
+  depends_on      = [azurerm_key_vault_access_policy.terraform]
 }
 
 resource "azurerm_container_app" "app" {

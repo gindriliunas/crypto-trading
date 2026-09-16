@@ -71,7 +71,7 @@ flowchart TB
 
   Browser --> Ingress --> Next
   Attacker -.-> Ingress
-  UAI -->|Secrets User| KV
+  UAI -->|Get List secrets| KV
   KV -->|CA secret refs| Next
   Next -->|SQL TLS| PG
   Next -->|prices| CoinGecko
@@ -81,7 +81,7 @@ flowchart TB
 Boundaries:
 
 1. **Internet → ingress** — TLS terminated by Container Apps  
-2. **App → Key Vault** — managed identity, RBAC Secrets User  
+2. **App → Key Vault** — managed identity with Get/List access policy  
 3. **App → Postgres** — `sslmode=require`; firewall Allow Azure Services + optional admin CIDRs  
 4. **CI → Azure** — service principal secrets in GitHub Environments  
 
