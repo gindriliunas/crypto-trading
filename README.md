@@ -39,16 +39,17 @@ SCA focuses on identifying and managing open-source components and third-party l
 ## Conclusion
 By integrating SAST, SCA, and IaC scanning practices into the DevSecOps pipeline, the project aims to enhance the security posture of the running applications in AWS, reducing vulnerabilities, and ensure compliance throughout the software development lifecycle.
 
-## Multi-environment AWS deploy (dev / staging / production)
+## Multi-environment Azure deploy (dev / staging / production)
 
-Single AWS account, separate Terraform state per environment. Trunk-based flow on `main`.
+Primary cloud is **Azure** (`azure/` Terraform). Trunk-based flow on `main`.
 
 | Trigger | Environment | Behavior |
 |---------|-------------|----------|
-| PR to `main` | — | `terraform plan` against **dev** |
-| Merge/push to `main` | `dev` | Auto `terraform apply` |
-| Actions → **AWS Deploy** → Run workflow → `staging` | `staging` | Manual apply |
-| Actions → **AWS Deploy** → Run workflow → `production` | `production` | Manual apply (after Environment approval) |
+| PR to `main` | — | `terraform plan` (Azure `dev`) |
+| Merge/push to `main` | `dev` | Auto Azure apply + ACR image push |
+| Actions → **Azure Deploy** → Run workflow | `staging` / `production` | Manual apply |
+
+Legacy AWS stack can be torn down via **AWS Destroy** (manual `workflow_dispatch`).
 
 ```mermaid
 flowchart LR
@@ -69,37 +70,42 @@ In the repo: **Settings → Environments**, create:
 
 Repo secrets (or the same secrets on each Environment):
 
+- `ARM_CLIENT_ID`
+- `ARM_CLIENT_SECRET`
+- `ARM_SUBSCRIPTION_ID`
+- `ARM_TENANT_ID`
+
+Optional (only for legacy **AWS Destroy** workflow):
+
 - `AWS_ACCESS_KEY_ID`
 - `AWS_SECRET_ACCESS_KEY`
 
 ### Promote day to day
 
 1. Open a PR → wait for Terraform plan (and SAST) to pass → merge
-2. Merge deploys **dev** automatically
-3. When ready: **Actions** → **AWS Deploy** → **Run workflow** → select **staging**
+2. Merge deploys **dev** automatically (Azure Container Apps + ACR)
+3. When ready: **Actions** → **Azure Deploy** → **Run workflow** → select **staging**
 4. When ready: **Run workflow** → select **production** → approve the Environment gate if prompted
 
 ### Terraform layout
 
 | Path | Purpose |
 |------|---------|
-| `backends/<env>.hcl` | S3 state key per env (`env/dev/...`, `env/staging/...`, `env/production/...`) |
-| `envs/<env>.tfvars` | Non-secret env vars (`environment`, `aws_region`, `vpc_cidr`) |
-| `main.tf` | Env-scoped app data bucket; shared state bucket is bootstrap only |
-| `network.tf` / `ecr.tf` / `ecs_express.tf` | VPC, ECR, ECS Express Mode (managed HTTPS URL) |
-| `cognito.tf` / `rds.tf` | User pool (login) + Postgres for per-user paper trade history |
+| `azure/backends/<env>.hcl` | Azure Blob state key per env |
+| `azure/envs/<env>.tfvars` | Non-secret env vars (`environment`, `location`) |
+| `azure/main.tf` | Resource group, ACR, Postgres Flexible Server, Container Apps |
 
-The dashboard lives in `dashboard/`. Merge to `main` builds the image, pushes it to ECR, and deploys **ECS Express Mode** (0.25 vCPU / 512 MB Fargate). After apply, Terraform output `dashboard_url` is the public **HTTPS** URL.
+The dashboard lives in `dashboard/`. Merge to `main` builds the image, pushes it to ACR, and deploys **Azure Container Apps**. After apply, Terraform output `dashboard_url` is the public **HTTPS** URL.
 
-**Note:** Express Mode runs on Fargate. Your account needs a **Fargate On-Demand vCPU quota > 0** in `eu-west-2` (open an AWS Support case if it is still 0).
+**Custom domain:** point a CNAME (e.g. `dev.gindri.com`) at the Container Apps FQDN from `dashboard_url`.
 
-**Custom domain:** point a CNAME (e.g. `dev.gindri.com`) at the Express Mode endpoint hostname from `dashboard_url`.
-
-**Accounts:** Cognito email/password. **History:** each signed-in user’s cash, holdings, and trades are stored in that environment’s RDS database (not in the browser).
+**Accounts:** email/password (JWT + bcrypt in Postgres). **History:** each signed-in user’s cash, holdings, and trades are stored in that environment’s Postgres database.
 
 ### Local Terraform commands
 
 ```bash
+cd azure
+
 # Dev
 terraform init -reconfigure -backend-config=backends/dev.hcl
 terraform plan -var-file=envs/dev.tfvars

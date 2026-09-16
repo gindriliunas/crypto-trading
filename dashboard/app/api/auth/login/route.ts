@@ -28,7 +28,7 @@ export async function POST(request: Request) {
 
     const idToken = await signIn(email, password);
     const response = NextResponse.json({ ok: true });
-    response.cookies.set(AUTH_COOKIE, idToken, authCookieOptions(60 * 60));
+    response.cookies.set(AUTH_COOKIE, idToken, authCookieOptions(60 * 60 * 24 * 7));
     return response;
   } catch (error) {
     const message =

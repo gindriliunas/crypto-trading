@@ -19,7 +19,7 @@ export function AuthPanel({ email, configured, onAuthChange }: AuthPanelProps) {
     return (
       <div className="rounded-xl border border-amber-900/60 bg-amber-950/40 px-4 py-3 text-sm text-amber-200">
         Cognito is not configured locally. Trades stay in this browser until you
-        deploy with Cognito + RDS.
+        deploy with JWT auth + Postgres.
       </div>
     );
   }
@@ -93,7 +93,7 @@ export function AuthPanel({ email, configured, onAuthChange }: AuthPanelProps) {
             {mode === "login" ? "Sign in to save trades" : "Create an account"}
           </p>
           <p className="text-xs text-zinc-500">
-            Paper trades and P&amp;L history sync to your account in RDS.
+            Paper trades and P&amp;L history sync to your account in Postgres.
           </p>
         </div>
         <button

@@ -1,0 +1,145 @@
+name: Azure Deploy
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Target environment
+        required: true
+        type: choice
+        options: [dev, staging, production]
+
+permissions:
+  contents: read
+
+env:
+  ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }}
+  ARM_CLIENT_SECRET: ${{ secrets.ARM_CLIENT_SECRET }}
+  ARM_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }}
+  ARM_TENANT_ID: ${{ secrets.ARM_TENANT_ID }}
+
+jobs:
+  plan:
+    name: Terraform Plan (Azure)
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: azure
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.8
+          terraform_wrapper: false
+      - run: terraform init -reconfigure -backend-config=backends/dev.hcl
+      - run: terraform plan -input=false -var-file=envs/dev.tfvars
+
+  deploy-dev:
+    name: Deploy Azure Dev
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: dev
+    defaults:
+      run:
+        working-directory: azure
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.8
+          terraform_wrapper: false
+      - uses: azure/login@v2
+        with:
+          creds: |
+            {
+              "clientId": "${{ secrets.ARM_CLIENT_ID }}",
+              "clientSecret": "${{ secrets.ARM_CLIENT_SECRET }}",
+              "subscriptionId": "${{ secrets.ARM_SUBSCRIPTION_ID }}",
+              "tenantId": "${{ secrets.ARM_TENANT_ID }}"
+            }
+      - name: Terraform init
+        run: terraform init -reconfigure -backend-config=backends/dev.hcl
+      - name: Create registry and database first
+        run: |
+          terraform apply -input=false -auto-approve -var-file=envs/dev.tfvars \
+            -target=azurerm_resource_group.app \
+            -target=azurerm_container_registry.app \
+            -target=random_password.db \
+            -target=random_password.jwt \
+            -target=azurerm_postgresql_flexible_server.app \
+            -target=azurerm_postgresql_flexible_server_database.app \
+            -target=azurerm_postgresql_flexible_server_firewall_rule.allow_azure \
+            -target=azurerm_log_analytics_workspace.app \
+            -target=azurerm_container_app_environment.app
+      - name: Login to ACR
+        run: |
+          ACR=$(terraform output -raw acr_login_server)
+          USER=$(terraform output -raw acr_username)
+          PASS=$(terraform output -raw acr_password)
+          echo "$PASS" | docker login "$ACR" -u "$USER" --password-stdin
+      - name: Build and push image
+        run: |
+          ACR=$(terraform output -raw acr_login_server)
+          docker build -t "$ACR/crypto-trading-dev:${{ github.sha }}" -t "$ACR/crypto-trading-dev:latest" ../dashboard
+          docker push "$ACR/crypto-trading-dev:${{ github.sha }}"
+          docker push "$ACR/crypto-trading-dev:latest"
+      - name: Deploy Container App
+        run: terraform apply -input=false -auto-approve -var-file=envs/dev.tfvars -var="app_image_tag=${{ github.sha }}"
+      - name: Dashboard URL
+        run: terraform output dashboard_url
+
+  deploy-manual:
+    name: Deploy Azure ${{ inputs.environment }}
+    if: github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    defaults:
+      run:
+        working-directory: azure
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_version: 1.9.8
+          terraform_wrapper: false
+      - uses: azure/login@v2
+        with:
+          creds: |
+            {
+              "clientId": "${{ secrets.ARM_CLIENT_ID }}",
+              "clientSecret": "${{ secrets.ARM_CLIENT_SECRET }}",
+              "subscriptionId": "${{ secrets.ARM_SUBSCRIPTION_ID }}",
+              "tenantId": "${{ secrets.ARM_TENANT_ID }}"
+            }
+      - run: terraform init -reconfigure -backend-config=backends/${{ inputs.environment }}.hcl
+      - run: |
+          terraform apply -input=false -auto-approve -var-file=envs/${{ inputs.environment }}.tfvars \
+            -target=azurerm_resource_group.app \
+            -target=azurerm_container_registry.app \
+            -target=random_password.db \
+            -target=random_password.jwt \
+            -target=azurerm_postgresql_flexible_server.app \
+            -target=azurerm_postgresql_flexible_server_database.app \
+            -target=azurerm_postgresql_flexible_server_firewall_rule.allow_azure \
+            -target=azurerm_log_analytics_workspace.app \
+            -target=azurerm_container_app_environment.app
+      - name: Login to ACR
+        run: |
+          ACR=$(terraform output -raw acr_login_server)
+          USER=$(terraform output -raw acr_username)
+          PASS=$(terraform output -raw acr_password)
+          echo "$PASS" | docker login "$ACR" -u "$USER" --password-stdin
+      - name: Build and push image
+        run: |
+          ACR=$(terraform output -raw acr_login_server)
+          NAME="crypto-trading-${{ inputs.environment }}"
+          docker build -t "$ACR/$NAME:${{ github.sha }}" -t "$ACR/$NAME:latest" ../dashboard
+          docker push "$ACR/$NAME:${{ github.sha }}"
+          docker push "$ACR/$NAME:latest"
+      - run: terraform apply -input=false -auto-approve -var-file=envs/${{ inputs.environment }}.tfvars -var="app_image_tag=${{ github.sha }}"
+      - run: terraform output dashboard_url
