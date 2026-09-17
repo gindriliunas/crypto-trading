@@ -13,16 +13,17 @@ on:
         type: choice
         options: [dev, staging, production]
 
+# OIDC federated credentials (no ARM_CLIENT_SECRET).
+# Entra app → Federated credentials → GitHub Actions → Environment = job environment name.
 permissions:
   contents: read
+  id-token: write
 
-# Service principal auth for Terraform + azurerm backend (use_azuread_auth).
-# Must be non-empty repo (or Environment) secrets — empty values make Terraform fall back to `az login`.
 env:
   ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }}
-  ARM_CLIENT_SECRET: ${{ secrets.ARM_CLIENT_SECRET }}
   ARM_SUBSCRIPTION_ID: ${{ secrets.ARM_SUBSCRIPTION_ID }}
   ARM_TENANT_ID: ${{ secrets.ARM_TENANT_ID }}
+  ARM_USE_OIDC: true
   ARM_USE_CLI: false
 
 jobs:
@@ -40,18 +41,19 @@ jobs:
         # Job default is azure/, but checkout is skipped for Dependabot — run from workspace root.
         working-directory: ${{ github.workspace }}
         run: |
-          echo "Dependabot PRs cannot read Actions secrets."
+          echo "Dependabot PRs cannot use OIDC or read Actions secrets."
           echo "Azure terraform plan is skipped here; Security Scans still gate the PR."
       - uses: actions/checkout@v4
         if: github.actor != 'dependabot[bot]'
-      - name: Require ARM secrets
+      - name: Require ARM OIDC IDs
         if: github.actor != 'dependabot[bot]'
         run: |
           missing=0
-          for v in ARM_CLIENT_ID ARM_CLIENT_SECRET ARM_SUBSCRIPTION_ID ARM_TENANT_ID; do
+          for v in ARM_CLIENT_ID ARM_SUBSCRIPTION_ID ARM_TENANT_ID; do
             if [ -z "${!v}" ]; then
               echo "::error::$v is empty — add it under Settings → Secrets and variables → Actions (repository secrets)."
               echo "::error::Do not create empty Environment secrets with the same names (they override repo secrets)."
+              echo "::error::Also add an Entra federated credential for repo:ORG/REPO:environment:dev"
               missing=1
             fi
           done
@@ -59,13 +61,9 @@ jobs:
       - uses: azure/login@v2
         if: github.actor != 'dependabot[bot]'
         with:
-          creds: |
-            {
-              "clientId": "${{ secrets.ARM_CLIENT_ID }}",
-              "clientSecret": "${{ secrets.ARM_CLIENT_SECRET }}",
-              "subscriptionId": "${{ secrets.ARM_SUBSCRIPTION_ID }}",
-              "tenantId": "${{ secrets.ARM_TENANT_ID }}"
-            }
+          client-id: ${{ secrets.ARM_CLIENT_ID }}
+          tenant-id: ${{ secrets.ARM_TENANT_ID }}
+          subscription-id: ${{ secrets.ARM_SUBSCRIPTION_ID }}
       - uses: hashicorp/setup-terraform@v3
         if: github.actor != 'dependabot[bot]'
         with:
@@ -86,25 +84,22 @@ jobs:
         working-directory: azure
     steps:
       - uses: actions/checkout@v4
-      - name: Require ARM secrets
+      - name: Require ARM OIDC IDs
         run: |
           missing=0
-          for v in ARM_CLIENT_ID ARM_CLIENT_SECRET ARM_SUBSCRIPTION_ID ARM_TENANT_ID; do
+          for v in ARM_CLIENT_ID ARM_SUBSCRIPTION_ID ARM_TENANT_ID; do
             if [ -z "${!v}" ]; then
               echo "::error::$v is empty — add it under Settings → Secrets and variables → Actions (and/or Environment 'dev')"
+              echo "::error::Entra federated credential subject must be repo:ORG/REPO:environment:dev"
               missing=1
             fi
           done
           exit $missing
       - uses: azure/login@v2
         with:
-          creds: |
-            {
-              "clientId": "${{ secrets.ARM_CLIENT_ID }}",
-              "clientSecret": "${{ secrets.ARM_CLIENT_SECRET }}",
-              "subscriptionId": "${{ secrets.ARM_SUBSCRIPTION_ID }}",
-              "tenantId": "${{ secrets.ARM_TENANT_ID }}"
-            }
+          client-id: ${{ secrets.ARM_CLIENT_ID }}
+          tenant-id: ${{ secrets.ARM_TENANT_ID }}
+          subscription-id: ${{ secrets.ARM_SUBSCRIPTION_ID }}
       - uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: 1.9.8
@@ -195,25 +190,22 @@ jobs:
         working-directory: azure
     steps:
       - uses: actions/checkout@v4
-      - name: Require ARM secrets
+      - name: Require ARM OIDC IDs
         run: |
           missing=0
-          for v in ARM_CLIENT_ID ARM_CLIENT_SECRET ARM_SUBSCRIPTION_ID ARM_TENANT_ID; do
+          for v in ARM_CLIENT_ID ARM_SUBSCRIPTION_ID ARM_TENANT_ID; do
             if [ -z "${!v}" ]; then
               echo "::error::$v is empty — add it under Settings → Secrets (repo or Environment '${{ inputs.environment }}')"
+              echo "::error::Entra federated credential subject must be repo:ORG/REPO:environment:${{ inputs.environment }}"
               missing=1
             fi
           done
           exit $missing
       - uses: azure/login@v2
         with:
-          creds: |
-            {
-              "clientId": "${{ secrets.ARM_CLIENT_ID }}",
-              "clientSecret": "${{ secrets.ARM_CLIENT_SECRET }}",
-              "subscriptionId": "${{ secrets.ARM_SUBSCRIPTION_ID }}",
-              "tenantId": "${{ secrets.ARM_TENANT_ID }}"
-            }
+          client-id: ${{ secrets.ARM_CLIENT_ID }}
+          tenant-id: ${{ secrets.ARM_TENANT_ID }}
+          subscription-id: ${{ secrets.ARM_SUBSCRIPTION_ID }}
       - uses: hashicorp/setup-terraform@v3
         with:
           terraform_version: 1.9.8
