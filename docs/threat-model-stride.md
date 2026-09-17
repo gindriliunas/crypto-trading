@@ -83,7 +83,7 @@ Boundaries:
 1. **Internet → ingress** — TLS terminated by Container Apps  
 2. **App → Key Vault** — managed identity with Get/List access policy  
 3. **App → Postgres** — `sslmode=require`; firewall Allow Azure Services + optional admin CIDRs  
-4. **CI → Azure** — service principal secrets in GitHub Environments  
+4. **CI → Azure** — OIDC federated credentials (GitHub Environment → Entra app); no long-lived client secret  
 
 ---
 
@@ -106,7 +106,7 @@ Boundaries:
 | T-D2 | Login | DoS | Credential stuffing | Lockouts / noise | Medium | Lockout after 10 failures / 15 min | **Done** |
 | T-E1 | App process | Elevation | Escape container as root | Host abuse | Low | Non-root `nextjs`; stripped npm/yarn | **Done** |
 | T-E2 | Invite / disable | Elevation | Re-enable disabled user or steal invite | Unauthorized access | Low | `disabled_at`; invite only in Key Vault | **Done** |
-| T-E3 | CI SP | Elevation | Stolen ARM_* secrets | Full env rewrite | Low | GitHub Environment secrets; branch protection; rotate if leaked | **Partial** |
+| T-E3 | CI SP | Elevation | Stolen ARM_* secrets | Full env rewrite | Low | OIDC federated credentials (`id-token`); only client/tenant/subscription IDs in GitHub; branch protection | **Done** |
 
 ---
 
@@ -117,7 +117,7 @@ Boundaries:
 | 1 | T-I2 | Private Postgres VNet + private DNS when networking budget allows |
 | 2 | T-S3 / ISO 8.2 | Disable ACR admin; pull/push with managed identity |
 | 3 | T-R1 / T-D1 | Auth audit events + alert rules on lockouts / 5xx |
-| 4 | T-E3 | Prefer OIDC federated credentials for Actions over long-lived SP secret |
+| 4 | T-E3 | ~~OIDC for Actions~~ → done; rotate/delete any leftover `ARM_CLIENT_SECRET` |
 
 ---
 

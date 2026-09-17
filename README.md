@@ -97,7 +97,8 @@ Detail: [docs/container-hardening.md](docs/container-hardening.md).
 | Trivy `AZU-0013` Key Vault network deny blocking CI | KV network ACL **Allow** so GitHub Actions can write secrets (trade-off vs private endpoint + self-hosted runner) |
 | Key Vault RBAC `roleAssignments/write` 403 for Contributor SP | Switched to **access policies** Get/List for the Container Apps UAI |
 | Terraform state lock races on concurrent plans | `-lock-timeout` on plan/apply |
-| Dependabot PRs with empty `ARM_*` + wrong `azure/` cwd | Skip plan when credentials are empty; run skip from **workspace root** |
+| Dependabot PRs with empty `ARM_*` + wrong `azure/` cwd | Skip plan for Dependabot; run skip from **workspace root** |
+| Long-lived `ARM_CLIENT_SECRET` in GitHub | **OIDC federated credentials** — `azure/login` + `ARM_USE_OIDC` (no client secret) |
 
 ### App secrets
 
@@ -124,6 +125,7 @@ Post-deploy ZAP against [https://dev.gindri.com](https://dev.gindri.com) is now 
 | Finding | Fix |
 |---------|-----|
 | `main` mergeable without proof of scans | Branch protection with required status checks |
+| Long-lived Azure SP password in CI | Entra federated credential → GitHub Environment `dev` (see deploy section) |
 | No structured threat model | [docs/threat-model-stride.md](docs/threat-model-stride.md) |
 
 ---
@@ -172,7 +174,21 @@ These are **readiness / gap analyses**, not certification claims.
 | Push → `main` | `dev` | Scans + apply + image scan + ACR + Container App + **ZAP DAST** |
 | Actions → **Azure Deploy** | `staging` / `production` | Manual promote |
 
-**Secrets:** `ARM_CLIENT_ID`, `ARM_CLIENT_SECRET`, `ARM_SUBSCRIPTION_ID`, `ARM_TENANT_ID`
+**CI auth (OIDC — no client secret):**
+
+| GitHub secret | Purpose |
+|---------------|---------|
+| `ARM_CLIENT_ID` | Entra app (client) ID |
+| `ARM_TENANT_ID` | Directory (tenant) ID |
+| `ARM_SUBSCRIPTION_ID` | Target subscription |
+
+Delete `ARM_CLIENT_SECRET` once OIDC works. In Entra → App registration → **Federated credentials** → GitHub Actions, trust:
+
+- Org `gindriliunas`, repo `crypto-trading`, entity **Environment**, name `dev`  
+  (subject: `repo:gindriliunas/crypto-trading:environment:dev`)
+- Add matching credentials for `staging` / `production` before promoting those envs.
+
+Workflow uses `permissions.id-token: write`, `azure/login@v2` with client/tenant/subscription IDs, and `ARM_USE_OIDC=true`.
 
 ```bash
 cd azure
@@ -190,7 +206,7 @@ terraform apply -var-file=envs/dev.tfvars
 | Azure cloud architecture | Container Apps, ACR, Flexible Server, Key Vault + MI, Log Analytics |
 | Infrastructure as Code | Multi-env Terraform + remote Blob state + lock-timeout |
 | DevSecOps pipelines | Six-layer GitHub Actions gate + SARIF + post-deploy ZAP |
-| Finding → fix loop | Container CVEs, ZAP headers/CSP, KV access policy, Dependabot CI |
+| Finding → fix loop | Container CVEs, ZAP headers/CSP, KV access policy, Dependabot CI, OIDC |
 | Container security | Non-root image, apk upgrade, strip unused npm, Trivy gate |
 | Secure SDLC / compliance | CE + ISO27001 mapping + STRIDE |
 | Multi-env promotion | Trunk-based `dev` → manual staging/prod |
