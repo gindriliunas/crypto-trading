@@ -138,6 +138,9 @@ flowchart TB
 | POST | `/api/auth/signup` | No | Create user (password ≥ 12; invite when configured) |
 | POST | `/api/auth/login` | No | Set JWT cookie, 7-day maxAge; lockout after failures |
 | POST | `/api/auth/logout` | Cookie | Clear cookie |
+| POST | `/api/auth/reset-password` | No | Invite-gated password reset (clears lockout) |
+| GET | `/api/auth/reset-password` | No | `{ resetEnabled, inviteRequired, minPasswordLength }` |
+| POST | `/api/auth/change-password` | Cookie | Change password while signed in |
 | GET | `/api/portfolio` | Yes | Load or create portfolio (`$10,000` start) |
 | POST | `/api/trades` | Yes | Buy/sell; persist in a transaction |
 | POST | `/api/portfolio/reset` | Yes | Wipe holdings/trades, restore cash |

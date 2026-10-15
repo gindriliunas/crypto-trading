@@ -110,6 +110,88 @@ export async function signIn(email: string, password: string) {
     .sign(jwtSecret());
 }
 
+/** Operator-approved recovery: same invite gate as signup (no email provider). */
+export function isPasswordResetEnabled(): boolean {
+  return signupInviteConfigured();
+}
+
+function assertInviteCode(inviteCode?: string): void {
+  const expectedInvite = process.env.SIGNUP_INVITE_CODE?.trim();
+  if (!expectedInvite) {
+    throw new Error("Password reset is not enabled on this environment");
+  }
+  if (!inviteCode || inviteCode.trim() !== expectedInvite) {
+    throw new Error("Invalid or missing invite code");
+  }
+}
+
+export async function resetPassword(
+  email: string,
+  newPassword: string,
+  inviteCode?: string,
+): Promise<void> {
+  assertInviteCode(inviteCode);
+
+  const passwordError = validatePassword(newPassword);
+  if (passwordError) {
+    throw new Error(passwordError);
+  }
+
+  await ensureUsersTable();
+  const result = await query<{
+    id: string;
+    disabled_at: Date | null;
+  }>(`SELECT id, disabled_at FROM users WHERE email = $1`, [email]);
+  const user = result.rows[0];
+  if (!user) {
+    throw new Error("No account with that email");
+  }
+  if (user.disabled_at) {
+    throw new Error("This account has been disabled");
+  }
+
+  const passwordHash = await bcrypt.hash(newPassword, 10);
+  await query(`UPDATE users SET password_hash = $1 WHERE id = $2`, [
+    passwordHash,
+    user.id,
+  ]);
+}
+
+export async function changePassword(
+  userId: string,
+  currentPassword: string,
+  newPassword: string,
+): Promise<void> {
+  const passwordError = validatePassword(newPassword);
+  if (passwordError) {
+    throw new Error(passwordError);
+  }
+
+  await ensureUsersTable();
+  const result = await query<{
+    password_hash: string;
+    disabled_at: Date | null;
+  }>(`SELECT password_hash, disabled_at FROM users WHERE id = $1`, [userId]);
+  const user = result.rows[0];
+  if (!user) {
+    throw new Error("Account not found");
+  }
+  if (user.disabled_at) {
+    throw new Error("This account has been disabled");
+  }
+
+  const ok = await bcrypt.compare(currentPassword, user.password_hash);
+  if (!ok) {
+    throw new Error("Current password is incorrect");
+  }
+
+  const passwordHash = await bcrypt.hash(newPassword, 10);
+  await query(`UPDATE users SET password_hash = $1 WHERE id = $2`, [
+    passwordHash,
+    userId,
+  ]);
+}
+
 export async function verifyIdToken(token: string): Promise<AuthUser> {
   const { payload } = await jwtVerify(token, jwtSecret());
   const sub = typeof payload.sub === "string" ? payload.sub : null;

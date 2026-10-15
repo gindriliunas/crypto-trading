@@ -146,7 +146,9 @@ CodeQL · Trivy · Checkov · tfsec · Gitleaks · OWASP ZAP
 1. Invite signup (`SIGNUP_INVITE_CODE`) or local `ALLOW_PUBLIC_SIGNUP`  
 2. Password: **min 12** + common-password deny list; bcrypt in Postgres  
 3. Login lockout: **10** failures → **15** minutes  
-4. JWT in httpOnly cookie `paper_id_token` (7d); TLS to Postgres (`sslmode=require`)
+4. JWT in httpOnly cookie `paper_id_token` (7d); TLS to Postgres (`sslmode=require`)  
+5. **Forgot password?** — invite-gated reset (`POST /api/auth/reset-password`; same invite as signup; no email provider)  
+6. **Change password** when signed in (`POST /api/auth/change-password`)
 
 ---
 
