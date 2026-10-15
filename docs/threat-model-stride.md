@@ -105,7 +105,7 @@ Boundaries:
 | T-D1 | Ingress | DoS | Flood HTTPS / API | Availability loss | Medium | CA scale 1–2 replicas; Azure platform DDoS baseline | **Partial** |
 | T-D2 | Login | DoS | Credential stuffing | Lockouts / noise | Medium | Lockout after 10 failures / 15 min | **Done** |
 | T-E1 | App process | Elevation | Escape container as root | Host abuse | Low | Non-root `nextjs`; stripped npm/yarn | **Done** |
-| T-E2 | Invite / disable | Elevation | Re-enable disabled user or steal invite | Unauthorized access | Low | `disabled_at`; invite only in Key Vault | **Done** |
+| T-E2 | Invite / disable | Elevation | Re-enable disabled user or steal invite | Unauthorized access | Low | `disabled_at`; invite only in Key Vault; password reset also invite-gated | **Done** |
 | T-E3 | CI SP | Elevation | Stolen ARM_* secrets | Full env rewrite | Low | OIDC federated credentials (`id-token`); only client/tenant/subscription IDs in GitHub; branch protection | **Done** |
 
 ---
