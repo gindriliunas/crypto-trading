@@ -40,7 +40,7 @@ flowchart LR
 | Trigger | What runs |
 |---------|-----------|
 | PR → `main` | Security Scans + Terraform plan (Azure `dev`) |
-| Push → `main` | Security Scans + Azure Deploy (scan → ACR → Container App → health → **ZAP**) |
+| Push → `main` | Security Scans, then Azure Deploy only if that scan workflow succeeded (image scan → ACR → Container App → health → **ZAP**) |
 | Manual workflow | Staging / production promote (+ ZAP when target is `dev`) |
 
 ## Container hardening note

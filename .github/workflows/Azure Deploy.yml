@@ -3,8 +3,6 @@ name: Azure Deploy
 on:
   pull_request:
     branches: [main]
-  push:
-    branches: [main]
   workflow_dispatch:
     inputs:
       environment:
@@ -12,12 +10,18 @@ on:
         required: true
         type: choice
         options: [dev, staging, production]
+  # Dev deploy starts only after Security Scans finishes. A failed scan fails this workflow.
+  workflow_run:
+    workflows: ["Security Scans"]
+    types: [completed]
+    branches: [main]
 
 # OIDC federated credentials (no ARM_CLIENT_SECRET).
 # Entra app → Federated credentials → GitHub Actions → Environment = job environment name.
 permissions:
   contents: read
   id-token: write
+  actions: read
 
 env:
   ARM_CLIENT_ID: ${{ secrets.ARM_CLIENT_ID }}
@@ -74,9 +78,39 @@ jobs:
       - if: github.actor != 'dependabot[bot]'
         run: terraform plan -input=false -lock-timeout=5m -var-file=envs/dev.tfvars
 
+  security-gate:
+    name: Security scans gate
+    if: github.event_name == 'workflow_run'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Block deploy when Security Scans did not pass
+        run: |
+          set -euo pipefail
+          conclusion="${{ github.event.workflow_run.conclusion }}"
+          event="${{ github.event.workflow_run.event }}"
+          branch="${{ github.event.workflow_run.head_branch }}"
+          sha="${{ github.event.workflow_run.head_sha }}"
+          url="${{ github.event.workflow_run.html_url }}"
+          echo "Security Scans event=$event branch=$branch conclusion=$conclusion sha=$sha"
+          echo "Run: $url"
+          if [ "$event" != "push" ] || [ "$branch" != "main" ]; then
+            echo "Not a push to main. Dev deploy will not start."
+            exit 0
+          fi
+          if [ "$conclusion" != "success" ]; then
+            echo "::error::Security Scans concluded $conclusion for $sha. Dev deploy is blocked."
+            exit 1
+          fi
+          echo "Security Scans passed. Dev deploy may start."
+
   deploy-dev:
     name: Deploy Azure Dev
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: security-gate
+    if: >-
+      github.event_name == 'workflow_run' &&
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'main'
     runs-on: ubuntu-latest
     environment: dev
     defaults:
@@ -84,6 +118,8 @@ jobs:
         working-directory: azure
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
       - name: Require ARM OIDC IDs
         run: |
           missing=0
@@ -130,12 +166,12 @@ jobs:
       - name: Build image
         run: |
           ACR="${{ steps.acr.outputs.login_server }}"
-          docker build -t "$ACR/crypto-trading-dev:${{ github.sha }}" -t "$ACR/crypto-trading-dev:latest" ../dashboard
+          docker build -t "$ACR/crypto-trading-dev:${{ github.event.workflow_run.head_sha }}" -t "$ACR/crypto-trading-dev:latest" ../dashboard
       - name: Container image scan (Trivy)
         uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: image
-          image-ref: ${{ steps.acr.outputs.login_server }}/crypto-trading-dev:${{ github.sha }}
+          image-ref: ${{ steps.acr.outputs.login_server }}/crypto-trading-dev:${{ github.event.workflow_run.head_sha }}
           scanners: vuln,secret,misconfig
           severity: CRITICAL,HIGH
           ignore-unfixed: true
@@ -144,20 +180,22 @@ jobs:
       - name: Push image
         run: |
           ACR="${{ steps.acr.outputs.login_server }}"
-          docker push "$ACR/crypto-trading-dev:${{ github.sha }}"
+          docker push "$ACR/crypto-trading-dev:${{ github.event.workflow_run.head_sha }}"
           docker push "$ACR/crypto-trading-dev:latest"
       - name: Deploy Container App
-        run: terraform apply -input=false -lock-timeout=5m -auto-approve -var-file=envs/dev.tfvars -var="app_image_tag=${{ github.sha }}"
+        run: terraform apply -input=false -lock-timeout=5m -auto-approve -var-file=envs/dev.tfvars -var="app_image_tag=${{ github.event.workflow_run.head_sha }}"
       - name: Dashboard URL
         run: terraform output dashboard_url
 
   dast-dev:
     name: DAST after deploy (OWASP ZAP)
     needs: deploy-dev
-    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    if: needs.deploy-dev.result == 'success'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
       - name: Wait for /api/health
         run: |
           set -e
@@ -189,6 +227,40 @@ jobs:
       run:
         working-directory: azure
     steps:
+      - name: Block deploy unless Security Scans succeeded
+        working-directory: ${{ github.workspace }}
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          sha="${{ github.sha }}"
+          repo="${{ github.repository }}"
+          echo "Requiring a successful Security Scans run for $sha"
+          for i in $(seq 1 60); do
+            json=$(gh api "/repos/${repo}/actions/workflows/Security%20Scans.yml/runs?head_sha=${sha}&per_page=5")
+            status=$(printf '%s' "$json" | jq -r '.workflow_runs[0].status // ""')
+            conclusion=$(printf '%s' "$json" | jq -r '.workflow_runs[0].conclusion // ""')
+            url=$(printf '%s' "$json" | jq -r '.workflow_runs[0].html_url // ""')
+            if [ -z "$status" ]; then
+              echo "No Security Scans run for this commit yet ($i/60)."
+              sleep 30
+              continue
+            fi
+            echo "Latest Security Scans status=$status conclusion=$conclusion $url"
+            if [ "$status" != "completed" ]; then
+              echo "Waiting for Security Scans ($i/60)..."
+              sleep 30
+              continue
+            fi
+            if [ "$conclusion" = "success" ]; then
+              echo "Security Scans passed."
+              exit 0
+            fi
+            echo "::error::Security Scans concluded $conclusion for $sha. Deploy is blocked. $url"
+            exit 1
+          done
+          echo "::error::No successful Security Scans run for $sha. Deploy is blocked."
+          exit 1
       - uses: actions/checkout@v4
       - name: Require ARM OIDC IDs
         run: |
@@ -259,7 +331,7 @@ jobs:
   dast-manual-dev:
     name: DAST after manual deploy (OWASP ZAP)
     needs: deploy-manual
-    if: github.event_name == 'workflow_dispatch' && inputs.environment == 'dev'
+    if: needs.deploy-manual.result == 'success' && inputs.environment == 'dev'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4

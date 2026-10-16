@@ -72,7 +72,7 @@ SARIF uploads land in the GitHub **Security** tab. Full gate notes: [docs/devsec
 - Security Scans: SAST, SCA, Secrets, IaC, Container, Security gate summary  
 - Azure Deploy: Terraform Plan (Azure)  
 
-DAST after deploy runs on push to `main` once Azure Deploy finishes (not a merge check).
+A push to `main` does not deploy until Security Scans for that commit succeeds. A failed scan fails the Azure Deploy run and skips the release. DAST after deploy then runs once that deploy finishes (not a merge check).
 
 ---
 
@@ -173,7 +173,7 @@ These are **readiness / gap analyses**, not certification claims.
 | Trigger | Environment | Behavior |
 |---------|-------------|----------|
 | PR → `main` | — | Security Scans + `terraform plan` (dev) |
-| Push → `main` | `dev` | Scans + apply + image scan + ACR + Container App + **ZAP DAST** |
+| Push → `main` | `dev` | Security Scans must succeed, then apply + image scan + ACR + Container App + **ZAP DAST** |
 | Actions → **Azure Deploy** | `staging` / `production` | Manual promote |
 
 **CI auth (OIDC — no client secret):**

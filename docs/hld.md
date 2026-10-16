@@ -390,7 +390,8 @@ flowchart LR
   sec --> gate[Gate]
   plan --> gate
   gate -->|merge| push[Push main]
-  push --> apply[terraform apply dev]
+  push --> scans[Security Scans]
+  scans -->|pass| apply[terraform apply dev]
   apply --> build[docker build dashboard]
   build --> trivy[Trivy image]
   trivy -->|pass| acr[Push ACR :sha]
@@ -401,7 +402,7 @@ flowchart LR
   stg --> prod[production]
 ```
 
-Security Scans (every PR and push to `main`): Gitleaks + Trivy secrets, Trivy SCA, CodeQL (SAST), Trivy + Checkov + tfsec (IaC), Trivy container. OWASP ZAP also runs in Security Scans (soft on PR/push). **Blocking DAST** is `DAST after deploy (OWASP ZAP)` in Azure Deploy against `https://dev.gindri.com` after health checks. Deploy re-scans the image before ACR push. Secrets for the app come from Key Vault via managed identity.
+Security Scans (every PR and push to `main`): Gitleaks + Trivy secrets, Trivy SCA, CodeQL (SAST), Trivy + Checkov + tfsec (IaC), Trivy container. OWASP ZAP also runs in Security Scans (soft on PR/push). A push to `main` deploys only after that Security Scans workflow succeeds. **Blocking DAST** is `DAST after deploy (OWASP ZAP)` in Azure Deploy against `https://dev.gindri.com` after health checks. Deploy re-scans the image before ACR push. Secrets for the app come from Key Vault via managed identity.
 
 ---
 
