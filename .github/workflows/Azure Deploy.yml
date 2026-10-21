@@ -47,7 +47,7 @@ jobs:
         run: |
           echo "Dependabot PRs cannot use OIDC or read Actions secrets."
           echo "Azure terraform plan is skipped here; Security Scans still gate the PR."
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         if: github.actor != 'dependabot[bot]'
       - name: Require ARM OIDC IDs
         if: github.actor != 'dependabot[bot]'
@@ -117,7 +117,7 @@ jobs:
       run:
         working-directory: azure
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ github.event.workflow_run.head_sha }}
       - name: Require ARM OIDC IDs
@@ -193,7 +193,7 @@ jobs:
     if: needs.deploy-dev.result == 'success'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ github.event.workflow_run.head_sha }}
       - name: Wait for /api/health
@@ -261,7 +261,7 @@ jobs:
           done
           echo "::error::No successful Security Scans run for $sha. Deploy is blocked."
           exit 1
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Require ARM OIDC IDs
         run: |
           missing=0
@@ -334,7 +334,7 @@ jobs:
     if: needs.deploy-manual.result == 'success' && inputs.environment == 'dev'
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Wait for /api/health
         run: |
           set -e
