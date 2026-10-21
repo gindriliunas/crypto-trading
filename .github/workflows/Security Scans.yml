@@ -23,7 +23,7 @@ jobs:
     name: SAST (CodeQL)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: github/codeql-action/init@v3
         with:
           languages: javascript-typescript
@@ -36,7 +36,7 @@ jobs:
     name: SCA (Trivy dependencies)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Trivy filesystem vulnerability scan
         uses: aquasecurity/trivy-action@v0.36.0
         with:
@@ -59,7 +59,7 @@ jobs:
     name: Secrets (Gitleaks + Trivy)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
       - name: Trivy secret scan
@@ -80,7 +80,7 @@ jobs:
     name: IaC (Trivy + Checkov + tfsec)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Trivy misconfig (Azure Terraform)
         uses: aquasecurity/trivy-action@v0.36.0
         with:
@@ -138,7 +138,7 @@ jobs:
     name: Container (Trivy image)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
       - name: Build dashboard image (local tag)
@@ -176,7 +176,7 @@ jobs:
     # Hard gate on workflow_dispatch for ad-hoc Security Scans runs.
     continue-on-error: ${{ github.event_name != 'workflow_dispatch' }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - name: ZAP baseline against live dev
         uses: zaproxy/action-baseline@v0.14.0
         with:
