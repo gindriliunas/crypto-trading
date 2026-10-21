@@ -44,7 +44,7 @@ flowchart LR
 
 ## 2. Azure architecture (per environment)
 
-Environments: `dev` (auto on merge to `main`), `staging` and `production` (manual workflow). Each env is an isolated resource group `crypto-trading-<env>` in `uksouth`.
+Environments: `dev` (auto on merge to `main`), `staging` and `production` (manual workflow). Each env is an isolated resource group `crypto-trading-<env>`. Dev and production are in `uksouth`; staging is in `ukwest` because the subscription allows one Container Apps Environment per region.
 
 ```mermaid
 flowchart TB
